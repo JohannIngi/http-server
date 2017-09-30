@@ -11,11 +11,15 @@
 
 /*Defines*/
 #define QUEUED 5
+
 /*Typedefs*/
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
+
+/*Structs*/
 typedef struct 
 {
+    ssize_t recv_msg;
     sockaddr address;
     socklen_t len;
 } client_info;
@@ -25,24 +29,39 @@ typedef struct
     sockaddr_in address;
 
 }server_info;
+
+/*Functions*/
 void startup_server(server_info* server, const char* port){
     server->sockfd = socket(AF_INET, SOCK_STREAM, 0);
     //If sockfd is some bullshit throw error!
-
     memset(&server->address, 0, sizeof(sockaddr_in));
     server->address.sin_family = AF_INET;
     server->address.sin_addr.s_addr = htonl(INADDR_ANY);
     server->address.sin_port = htons(atoi(port));
     bind(server->sockfd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in));
 }
-/*void setup_server(){}*/
+int accept_request(client_info* client, server_info* server){
+    client->len = (socklen_t) sizeof(sockaddr_in);
+    int connfd = accept(server->sockfd, (sockaddr *) &client->address, &client->len);
+    if (connfd == -1) {
+        perror("Exiting...");
+        exit(EXIT_FAILURE);
+    }
+
+    return connfd;
+}
+/*void receive_message(client_info* client, char* buffer){
+    // Receive from connfd, not sockfd.
+    client->recv_msg = recv(client->connfd, &buffer, sizeof(&buffer) - 1, 0);
+    buffer[client->recv_msg] = '\0';
+}*/
+/*void error_handler(){}*/
 /*void client_handle(){}*/
-/*int accept_request(){} return for int connfd*/
 int main(int argc, char **argv)
 {
     char* port = argv[1];
     server_info server;
-    client_info c_info;
+    client_info client;
     char buffer[4096];
     //GHashTable * html_header = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
@@ -54,8 +73,7 @@ int main(int argc, char **argv)
     // host byte order. The macros htonl, htons convert the values.
     startup_server(&server, port);
 
-    memset(&c_info.address, 0, sizeof(sockaddr_in));
-    
+    memset(&client.address, 0, sizeof(sockaddr_in));
     fprintf(stdout, "Socket set up complete. Listening for request.\n"); fflush(stdout);
     // Before the server can accept messages, it has to listen to the
     // welcome port. A backlog of one connection is allowed.
@@ -64,13 +82,10 @@ int main(int argc, char **argv)
         fprintf(stdout, "Waiting to receive...\n"); fflush(stdout);
         // We first have to accept a TCP connection, connfd is a fresh
         // handle dedicated to this connection.
-        c_info.len = (socklen_t) sizeof(sockaddr_in);
-
-        int connfd = accept(server.sockfd, (sockaddr *) &c_info.address, &c_info.len);
-        // Receive from connfd, not sockfd.
-        ssize_t n = recv(connfd, buffer, sizeof(buffer) - 1, 0);
-
-        buffer[n] = '\0';
+        int connfd = accept_request(&client, &server);
+        client.recv_msg = recv(connfd, buffer, sizeof(buffer) - 1, 0);
+        buffer[client.recv_msg] = '\0';
+        //receive_message(&client, buffer);
 
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", buffer);fflush(stdout);
 
