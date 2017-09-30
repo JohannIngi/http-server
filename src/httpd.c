@@ -14,42 +14,59 @@
 /*Typedefs*/
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
-/*typedef struct 
+typedef struct 
 {
-    
-} client_info;*/
+    sockaddr address;
+    socklen_t len;
+} client_info;
+typedef struct
+{
+    int sockfd;
+    sockaddr_in address;
 
+}server_info;
+void startup_server(server_info* server, const char* port){
+    server->sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    //If sockfd is some bullshit throw error!
+
+    memset(&server->address, 0, sizeof(sockaddr_in));
+    server->address.sin_family = AF_INET;
+    server->address.sin_addr.s_addr = htonl(INADDR_ANY);
+    server->address.sin_port = htons(atoi(port));
+    bind(server->sockfd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in));
+}
+/*void setup_server(){}*/
+/*void client_handle(){}*/
+/*int accept_request(){} return for int connfd*/
 int main(int argc, char **argv)
 {
     char* port = argv[1];
-    int sockfd;
-    sockaddr_in server, client;
+    server_info server;
+    client_info c_info;
     char buffer[4096];
     //GHashTable * html_header = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
     fprintf(stdout, "Listening to server number: %s\n", port); fflush(stdout);
     // Create and bind a TCP socket.
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    
 
     // Network functions need arguments in network byte order instead of
     // host byte order. The macros htonl, htons convert the values.
-    memset(&server, 0, sizeof(sockaddr_in));
-    memset(&client, 0, sizeof(sockaddr_in));
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = htonl(INADDR_ANY);
-    server.sin_port = htons(atoi(port));
-    bind(sockfd, (sockaddr *) &server, (socklen_t) sizeof(server));
+    startup_server(&server, port);
+
+    memset(&c_info.address, 0, sizeof(sockaddr_in));
+    
     fprintf(stdout, "Socket set up complete. Listening for request.\n"); fflush(stdout);
     // Before the server can accept messages, it has to listen to the
     // welcome port. A backlog of one connection is allowed.
-    listen(sockfd, QUEUED);
+    listen(server.sockfd, QUEUED);
     for (;;) {
         fprintf(stdout, "Waiting to receive...\n"); fflush(stdout);
         // We first have to accept a TCP connection, connfd is a fresh
         // handle dedicated to this connection.
-        socklen_t len = (socklen_t) sizeof(client);
+        c_info.len = (socklen_t) sizeof(sockaddr_in);
 
-        int connfd = accept(sockfd, (sockaddr *) &client, &len);
+        int connfd = accept(server.sockfd, (sockaddr *) &c_info.address, &c_info.len);
         // Receive from connfd, not sockfd.
         ssize_t n = recv(connfd, buffer, sizeof(buffer) - 1, 0);
 
@@ -57,17 +74,18 @@ int main(int argc, char **argv)
 
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", buffer);fflush(stdout);
 
-            char* drasl = "HTTP/1.1 404 Not Found\n"
-            "Content-type: text/html\n"
-            "\n"
-            "<html>\n"
-            " <body>\n"
-            "  <h1>Not Found</h1>\n"
-            "  <p>Luger pistol</p>\n"
-            " </body>\n"
-            "</html>\n";
+        //handle_inc(&client, &server)
 
-        send(connfd, drasl, strlen(drasl), 0);
+        // if (request is GET)
+        // { dostuff get way} 
+        // else if { request is Post} {
+        // }
+        // else if {request is head} {
+        // }
+        // else {error}
+
+
+        //send(connfd, drasl, strlen(drasl), 0);
         // Close the connection.
         shutdown(connfd, SHUT_RDWR);
         close(connfd);
