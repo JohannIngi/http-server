@@ -57,6 +57,17 @@ int main(int argc, char **argv)
 
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", buffer);fflush(stdout);
 
+            char* drasl = "HTTP/1.1 404 Not Found\n"
+            "Content-type: text/html\n"
+            "\n"
+            "<html>\n"
+            " <body>\n"
+            "  <h1>Not Found</h1>\n"
+            "  <p>Luger pistol</p>\n"
+            " </body>\n"
+            "</html>\n";
+
+        send(connfd, drasl, strlen(drasl), 0);
         // Close the connection.
         shutdown(connfd, SHUT_RDWR);
         close(connfd);
