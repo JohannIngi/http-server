@@ -20,12 +20,14 @@ typedef struct
     sockaddr address;
     socklen_t len;
     char header_buffer[1024];
+    char html[4096];
 } client_info;
 typedef struct
 {
     int sockfd;
     sockaddr_in address;
     char buffer[4096];
+    
 }server_info;
 //*************************************
 // Insert comment here 
@@ -59,7 +61,7 @@ int accept_request(client_info* client, server_info* server){
 //*************************************
 // Insert comment here
 //*************************************
-void receive_message(server_info* server, int* connfd){
+void receive_message(server_info* server, client_info* client, int* connfd){
     // Receive from connfd, not sockfd.
     ssize_t recv_msg_len = recv(*connfd, server->buffer, sizeof(server->buffer) - 1, 0);
     server->buffer[recv_msg_len] = '\0';
@@ -72,8 +74,36 @@ void get_header_type(server_info* server, client_info* client){
     strcat(client->header_buffer, *header_type);
     g_strfreev(header_type);
 }
+//*************************************
+// Insert comment here 
+//*************************************
+void client_handle(server_info* server, client_info* client){
+    //checking if the header_buffer matches a GET request
+    if(g_str_match_string("GET", client->header_buffer, 1)){
+        //Do getstuff
+    }
+    //checking if the header_buffer matches a POST request
+    else if(g_str_match_string("POST", client->header_buffer, 1)){
+        //Do poststuff
+    }
+    //checking if the header_buffer matches a HEAD request
+    else if(g_str_match_string("HEAD", client->header_buffer, 1)){
 
-/*void client_handle(){}*/
+    }
+    else{
+        //Error stuff
+    }
+}
+void generate_html(client_info* client){
+    char html_stuff[4096] =
+    "HTTP/1.1 200 OK\n"
+    "Content-Type: text/html; charset=UTF-8\n\n"
+    "<!DOCTYPE html>\n"
+    "<html><head><title>HTTPServer</title></head>\n"
+    "<body><center><h1> Hello mr. Client</h1>\n"
+    "</center></body></html>\n";
+    strcpy(client->html, html_stuff);
+}
 /*void error_handler(){}*/
 int main(int argc, char **argv)
 {
@@ -93,18 +123,17 @@ int main(int argc, char **argv)
         fprintf(stdout, "Waiting to receive message...\n"); fflush(stdout);
 
         int connfd = accept_request(&client, &server);
-        receive_message(&server, &connfd);
+        receive_message(&server, &client, &connfd);
         get_header_type(&server, &client);
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
         fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
 
-        //handle_inc(&client, &server)
 
+        client_handle(&server, &client);
         //get/url http/1.1
 
-
-
-        //send(connfd, drasl, strlen(drasl), 0);
+        generate_html(&client);
+        send(connfd, client.html, strlen(client.html), 0);
         // Close the connection.
         shutdown(connfd, SHUT_RDWR);
         close(connfd);
