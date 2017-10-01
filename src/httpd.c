@@ -1,4 +1,4 @@
-/*Includes*/
+
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -9,14 +9,11 @@
 #include <stdlib.h>
 #include <glib.h>
 
-/*Defines*/
 #define QUEUED 5
 
-/*Typedefs*/
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
 
-/*Structs*/
 typedef struct 
 {
     sockaddr address;
@@ -27,10 +24,10 @@ typedef struct
     int sockfd;
     sockaddr_in address;
     char buffer[4096];
-
 }server_info;
-
-/*Functions*/
+//*************************************
+// comment here
+//*************************************
 void startup_server(server_info* server, const char* port){
     // Create and bind a TCP socket.
     server->sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -46,6 +43,9 @@ void startup_server(server_info* server, const char* port){
     // welcome port. A backlog of one connection is allowed.
     listen(server->sockfd, QUEUED);
 }
+//*************************************
+// comment here
+//*************************************
 int accept_request(client_info* client, server_info* server){
     client->len = (socklen_t) sizeof(sockaddr_in);
     int connfd = accept(server->sockfd, (sockaddr *) &client->address, &client->len);
@@ -53,9 +53,11 @@ int accept_request(client_info* client, server_info* server){
         perror("Exiting...");
         exit(EXIT_FAILURE);
     }
-
     return connfd;
 }
+//*************************************
+// comment here
+//*************************************
 void receive_message(server_info* server, int* connfd){
     // Receive from connfd, not sockfd.
     ssize_t recv_msg_len = recv(*connfd, server->buffer, sizeof(server->buffer) - 1, 0);
