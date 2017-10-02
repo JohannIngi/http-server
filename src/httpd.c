@@ -32,6 +32,7 @@ typedef struct
     int sockfd;
     sockaddr_in address;
     char buffer[4096];
+    char url_for_all[1024];
     
 }server_info;
 
@@ -42,29 +43,17 @@ void receive_message(server_info* server, int* connfd);
 void get_header_type(server_info* server, client_info* client);
 void client_handle(server_info* server, client_info* client);
 void generate_html(client_info* client);
-void write_to_log(client_info* client){
-    time_t t;
-    time(&t);
-    struct tm* t_info;
-    char time_buffer[20];
-    memset(time_buffer, 0, sizeof(time_buffer));
-    t_info = localtime(&t);
-    strftime(time_buffer, sizeof(time_buffer), "%a, %d %b %Y %X GMT", t_info);
+void write_to_log(client_info* client);
+void get_client_url(server_info* server, client_info* client){
+    //setting the buffer to zero
+    memset(server->url_for_all, 0, sizeof(server->url_for_all));
+    //splitting the client buffer where HTTP begins
+    char** url_keeper = g_strsplit(server->buffer, "HTTP", -1);
+    //adding the content to the appropriate buffer
+    strcat(server->url_for_all, *url_keeper);
+    //releasing the memory that g_strsplit was using when splittin the string
+    g_strfreev(url_keeper);
 
-    FILE* file;
-    file = fopen("log.txt", "a");
-    if (file == NULL) {
-        fprintf(stdout, "Error!");
-        fflush(stdout);
-    }
-    else{
-        fprintf(file, "%s : ", time_buffer);
-        fprintf(file, "%s:%hu: ", client->ip_address, client->port);
-        fprintf(file, "%s : ", client->header_buffer);
-        //TODO! write in URL
-        fprintf(file, "200 OK \n");
-    }
-    fclose(file);
 }
 /*void error_handler(){}*/
 int main(int argc, char **argv)
@@ -84,17 +73,18 @@ int main(int argc, char **argv)
         int connfd = accept_request(&client, &server);
 
         get_client_information(&client);
-        fprintf(stdout, "From ip address: %s. Port number: %hu\n", client.ip_address, client.port); fflush(stdout);
+        //fprintf(stdout, "From ip address: %s. Port number: %hu\n", client.ip_address, client.port); fflush(stdout);
 
         receive_message(&server, &connfd);
 
         get_header_type(&server, &client);
-
-        fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
+        get_client_url(&server, &client);
+        
+        //fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
         fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
 
         client_handle(&server, &client);
-
+        //fprintf(stdout, "URL...:%s\n", client.url_buffer); fflush(stdout);
         write_to_log(&client);
 
         generate_html(&client);
@@ -135,7 +125,7 @@ void startup_server(server_info* server, const char* port){
 // Accepting a requst from client
 //*************************************
 int accept_request(client_info* client, server_info* server){
-    //memsetting the buffer to zero
+    //setting the buffer to zero
     memset(&client->address, 0, sizeof(sockaddr_in));
     client->len = (socklen_t) sizeof(sockaddr_in);
     int connfd = accept(server->sockfd, (sockaddr *) &client->address, &client->len);
@@ -158,7 +148,7 @@ void get_client_information(client_info* client){
 // Receiving message from someone
 //*************************************
 void receive_message(server_info* server, int* connfd){
-    //memsetting the buffer to zero
+    //setting the buffer to zero
     memset(server->buffer, 0, sizeof(server->buffer));
     // Receive from connfd, not sockfd.
     ssize_t recv_msg_len = recv(*connfd, server->buffer, sizeof(server->buffer) - 1, 0);
@@ -168,7 +158,7 @@ void receive_message(server_info* server, int* connfd){
 // Getting the header type from the clients message. Is it a get, post or head
 //*************************************
 void get_header_type(server_info* server, client_info* client){
-    //memsetting the buffer to zero
+    //setting the buffer to zero
     memset(client->header_buffer, 0, sizeof(client->header_buffer));
     //make a pointer to a pointer or in other words a string array and storing the first word from the message buffer
     char** header_type = g_strsplit(server->buffer, " ", -1);
@@ -183,15 +173,19 @@ void get_header_type(server_info* server, client_info* client){
 void client_handle(server_info* server, client_info* client){
     //checking if the header_buffer matches a GET request
     if(g_str_match_string("GET", client->header_buffer, 1)){
-        //Do getstuff
+        //copying the server url buffer from array index 5 into the client url buffer
+        strcpy(client->url_buffer, &server->url_for_all[5]);
+
     }
     //checking if the header_buffer matches a POST request
     else if(g_str_match_string("POST", client->header_buffer, 1)){
-        //Do poststuff
+        //copying the server url buffer from array index 6 into the client url buffer
+        strcpy(client->url_buffer, &server->url_for_all[6]);
     }
     //checking if the header_buffer matches a HEAD request
     else if(g_str_match_string("HEAD", client->header_buffer, 1)){
-        //Do headstuff
+        //copying the server url buffer from array index 6 into the client url buffer
+        strcpy(client->url_buffer, &server->url_for_all[6]);
     }
     else{
         perror("No match to head-type");
@@ -214,4 +208,32 @@ void generate_html(client_info* client){
     memset(client->html, 0, sizeof(client->html));
     //copying the html code into the appropriate buffer
     strcpy(client->html, html_stuff);
+}
+//*************************************
+// Writing to a log file in the root directory
+//*************************************
+void write_to_log(client_info* client){
+    time_t t;
+    time(&t);
+    struct tm* t_info;
+    char time_buffer[20];
+    //setting the buffer to zero
+    memset(time_buffer, 0, sizeof(time_buffer));
+    t_info = localtime(&t);
+    strftime(time_buffer, sizeof(time_buffer), "%a, %d %b %Y %X GMT", t_info);
+
+    FILE* file;
+    file = fopen("log.txt", "a");
+    if (file == NULL) {
+        fprintf(stdout, "Error!");
+        fflush(stdout);
+    }
+    else{
+        fprintf(file, "%s: ", time_buffer);
+        fprintf(file, "%s:%hu: ", client->ip_address, client->port);
+        fprintf(file, "%s : ", client->header_buffer);
+        fprintf(file, "%s", client->url_buffer);
+        fprintf(file, "200 OK \n");
+    }
+    fclose(file);
 }
