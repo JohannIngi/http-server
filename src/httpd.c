@@ -21,8 +21,9 @@ typedef struct
 {
     sockaddr_in address;
     socklen_t len;
-    char header_buffer[1024];//memset?
-    char html[4096];//memset?
+    char header_buffer[1024];
+    char url_buffer[1024];
+    char html[4096];
     char* ip_address;
     unsigned short port;
 } client_info;
@@ -41,27 +42,30 @@ void receive_message(server_info* server, int* connfd);
 void get_header_type(server_info* server, client_info* client);
 void client_handle(server_info* server, client_info* client);
 void generate_html(client_info* client);
-/*void write_to_log(client_info* client){
-    time_t time;
-    time(&time);
-    char time_buffer[sizeof "2011-10-08T07:07:09Z"]; //20 chars
-    strftime(time_buffer, sizeof(time_buffer), "%FT%TZ", gmtime(time));
+void write_to_log(client_info* client){
+    time_t t;
+    time(&t);
+    struct tm* t_info;
+    char time_buffer[20];
+    memset(time_buffer, 0, sizeof(time_buffer));
+    t_info = localtime(&t);
+    strftime(time_buffer, sizeof(time_buffer), "%a, %d %b %Y %X GMT", t_info);
 
-    File* f;
-    f = fopen("log.txt", "a");
-    if (f == NULL) {
+    FILE* file;
+    file = fopen("log.txt", "a");
+    if (file == NULL) {
         fprintf(stdout, "Error!");
         fflush(stdout);
     }
     else{
-        fprintf(f, "%ld : ", time);
-        fprintf(f, "%s:%hu\n", client->ip_address, client->port);
-        fprintf(f, "%s : ", client->header_buffer);
+        fprintf(file, "%s : ", time_buffer);
+        fprintf(file, "%s:%hu: ", client->ip_address, client->port);
+        fprintf(file, "%s : ", client->header_buffer);
         //TODO! write in URL
-        fprintf(f, "200 OK \n");
+        fprintf(file, "200 OK \n");
     }
-    fclose(f);
-}*/
+    fclose(file);
+}
 /*void error_handler(){}*/
 int main(int argc, char **argv)
 {
@@ -91,7 +95,7 @@ int main(int argc, char **argv)
 
         client_handle(&server, &client);
 
-        //write_to_log(&client);
+        write_to_log(&client);
 
         generate_html(&client);
 
@@ -147,6 +151,8 @@ void get_client_information(client_info* client){
     client->ip_address = inet_ntoa(client->address.sin_addr);
     //storing information about the port from client
     client->port = client->address.sin_port;
+    //get the url from the client
+
 }
 //*************************************
 // Receiving message from someone
@@ -185,7 +191,7 @@ void client_handle(server_info* server, client_info* client){
     }
     //checking if the header_buffer matches a HEAD request
     else if(g_str_match_string("HEAD", client->header_buffer, 1)){
-
+        //Do headstuff
     }
     else{
         perror("No match to head-type");
