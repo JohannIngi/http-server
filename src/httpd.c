@@ -44,17 +44,7 @@ void get_header_type(server_info* server, client_info* client);
 void client_handle(server_info* server, client_info* client);
 void generate_html(client_info* client);
 void write_to_log(client_info* client);
-void get_client_url(server_info* server, client_info* client){
-    //setting the buffer to zero
-    memset(server->url_for_all, 0, sizeof(server->url_for_all));
-    //splitting the client buffer where HTTP begins
-    char** url_keeper = g_strsplit(server->buffer, "HTTP", -1);
-    //adding the content to the appropriate buffer
-    strcat(server->url_for_all, *url_keeper);
-    //releasing the memory that g_strsplit was using when splittin the string
-    g_strfreev(url_keeper);
-
-}
+void get_url(server_info* server);
 /*void error_handler(){}*/
 int main(int argc, char **argv)
 {
@@ -78,7 +68,7 @@ int main(int argc, char **argv)
         receive_message(&server, &connfd);
 
         get_header_type(&server, &client);
-        get_client_url(&server, &client);
+        get_url(&server);
         
         //fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
         fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
@@ -213,6 +203,7 @@ void generate_html(client_info* client){
 // Writing to a log file in the root directory
 //*************************************
 void write_to_log(client_info* client){
+    //setting ISO time
     time_t t;
     time(&t);
     struct tm* t_info;
@@ -221,19 +212,33 @@ void write_to_log(client_info* client){
     memset(time_buffer, 0, sizeof(time_buffer));
     t_info = localtime(&t);
     strftime(time_buffer, sizeof(time_buffer), "%a, %d %b %Y %X GMT", t_info);
-
+    //opening a file and logging a timestamp to it
     FILE* file;
-    file = fopen("log.txt", "a");
+    file = fopen("timestamp.log", "a");
     if (file == NULL) {
         fprintf(stdout, "Error!");
         fflush(stdout);
     }
     else{
         fprintf(file, "%s: ", time_buffer);
-        fprintf(file, "%s:%hu: ", client->ip_address, client->port);
+        fprintf(file, "%s:%hu ", client->ip_address, client->port);
         fprintf(file, "%s : ", client->header_buffer);
-        fprintf(file, "%s", client->url_buffer);
-        fprintf(file, "200 OK \n");
+        fprintf(file, "%s:", client->url_buffer);
+        fprintf(file, " 200 OK \n");
     }
     fclose(file);
+}
+//*************************************
+// Aquiring the url from a specific client
+//*************************************
+void get_url(server_info* server){
+    //setting the buffer to zero
+    memset(server->url_for_all, 0, sizeof(server->url_for_all));
+    //splitting the client buffer where HTTP begins
+    char** url_keeper = g_strsplit(server->buffer, "HTTP", -1);
+    //adding the content to the appropriate buffer
+    strcat(server->url_for_all, *url_keeper);
+    //releasing the memory that g_strsplit was using when splittin the string
+    g_strfreev(url_keeper);
+
 }
