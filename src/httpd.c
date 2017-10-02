@@ -8,6 +8,8 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <glib.h>
+#include <time.h>
+#include <arpa/inet.h>
 
 #define QUEUED 5
 
@@ -17,10 +19,12 @@ typedef struct sockaddr sockaddr;
 
 typedef struct 
 {
-    sockaddr address;
+    sockaddr_in address;
     socklen_t len;
-    char header_buffer[1024];
-    char html[4096];
+    char header_buffer[1024];//memset?
+    char html[4096];//memset?
+    char* ip_address;
+    unsigned short port;
 } client_info;
 typedef struct
 {
@@ -58,10 +62,15 @@ int accept_request(client_info* client, server_info* server){
     }
     return connfd;
 }
+void client_information(client_info* client){
+    client->ip_address = inet_ntoa(client->address.sin_addr);
+    client->port = client->address.sin_port;
+}
 //*************************************
 // Insert comment here
 //*************************************
-void receive_message(server_info* server, client_info* client, int* connfd){
+void receive_message(server_info* server, int* connfd){
+    memset(server->buffer, 0, sizeof(server->buffer));
     // Receive from connfd, not sockfd.
     ssize_t recv_msg_len = recv(*connfd, server->buffer, sizeof(server->buffer) - 1, 0);
     server->buffer[recv_msg_len] = '\0';
@@ -70,6 +79,7 @@ void receive_message(server_info* server, client_info* client, int* connfd){
 // Insert comment here
 //*************************************
 void get_header_type(server_info* server, client_info* client){
+    memset(client->header_buffer, 0, sizeof(client->header_buffer));
     char** header_type = g_strsplit(server->buffer, " ", -1);
     strcat(client->header_buffer, *header_type);
     g_strfreev(header_type);
@@ -102,38 +112,65 @@ void generate_html(client_info* client){
     "<html><head><title>HTTPServer</title></head>\n"
     "<body><center><h1> Hello mr. Client</h1>\n"
     "</center></body></html>\n";
+    memset(client->html, 0, sizeof(client->html));
     strcpy(client->html, html_stuff);
 }
+/*void write_to_log(client_info* client){
+    time_t time;
+    time(&time);
+    char time_buffer[sizeof "2011-10-08T07:07:09Z"]; //20 chars
+    strftime(time_buffer, sizeof(time_buffer), "%FT%TZ", gmtime(time));
+
+    File* f;
+    f = fopen("log.txt", "a");
+    if (f == NULL) {
+        fprintf(stdout, "Error!");
+        fflush(stdout);
+    }
+    else{
+        fprintf(f, "%ld : ", time);
+        fprintf(f, "%s:%hu\n", client->ip_address, client->port);
+        fprintf(f, "%s : ", client->header_buffer);
+        //TODO! write in URL
+        fprintf(f, "200 OK \n");
+    }
+    fclose(f);
+}*/
 /*void error_handler(){}*/
 int main(int argc, char **argv)
 {
-    char* port = argv[1];
+    char* welcome_port = argv[1];
     server_info server;
     client_info client;
 
-    fprintf(stdout, "Listening to server number: %s\n", port); fflush(stdout);
-     
-    startup_server(&server, port);
+    fprintf(stdout, "Listening to server number: %s\n", welcome_port); fflush(stdout);  
+    startup_server(&server, welcome_port);
 
-    
     fprintf(stdout, "Socket set up complete. Listening for request.\n"); fflush(stdout);
     
     while(1) {
 
         fprintf(stdout, "Waiting to receive message...\n"); fflush(stdout);
-
         int connfd = accept_request(&client, &server);
-        receive_message(&server, &client, &connfd);
+
+        client_information(&client);
+        fprintf(stdout, "From ip address: %s. Port number: %hu\n", client.ip_address, client.port); fflush(stdout);
+
+        receive_message(&server, &connfd);
+
         get_header_type(&server, &client);
+
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
         fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
 
-
         client_handle(&server, &client);
-        //get/url http/1.1
+
+        //write_to_log(&client);
 
         generate_html(&client);
+
         send(connfd, client.html, strlen(client.html), 0);
+
         // Close the connection.
         shutdown(connfd, SHUT_RDWR);
         close(connfd);
