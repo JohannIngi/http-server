@@ -41,7 +41,7 @@ int accept_request(client_info* client, server_info* server);
 void get_client_information(client_info* client);
 void receive_message(server_info* server, int* connfd);
 void get_header_type(server_info* server, client_info* client);
-void client_handle(server_info* server, client_info* client);
+void client_handle(server_info* server, client_info* client, int* connfd);
 void generate_html(client_info* client);
 void write_to_log(client_info* client);
 void get_url(server_info* server);
@@ -72,14 +72,10 @@ int main(int argc, char **argv)
         
         //fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
         fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
-
-        client_handle(&server, &client);
+        generate_html(&client);
+        client_handle(&server, &client, &connfd);
         //fprintf(stdout, "URL...:%s\n", client.url_buffer); fflush(stdout);
         write_to_log(&client);
-
-        generate_html(&client);
-
-        send(connfd, client.html, strlen(client.html), 0);
 
         // Close the connection.
         shutdown(connfd, SHUT_RDWR);
@@ -160,12 +156,12 @@ void get_header_type(server_info* server, client_info* client){
 //*************************************
 // client handler that decides what to do based on the client request; get, post or head
 //*************************************
-void client_handle(server_info* server, client_info* client){
+void client_handle(server_info* server, client_info* client, int* connfd){
     //checking if the header_buffer matches a GET request
     if(g_str_match_string("GET", client->header_buffer, 1)){
         //copying the server url buffer from array index 5 into the client url buffer
         strcpy(client->url_buffer, &server->url_for_all[5]);
-
+        send(*connfd, client->html, strlen(client->html), 0);
     }
     //checking if the header_buffer matches a POST request
     else if(g_str_match_string("POST", client->header_buffer, 1)){
@@ -187,17 +183,26 @@ void client_handle(server_info* server, client_info* client){
 // Hard-coded html for the client
 //*************************************
 void generate_html(client_info* client){
-    char html_stuff[4096] =
-    "HTTP/1.1 200 OK\n"
-    "Content-Type: text/html; charset=UTF-8\n\n"
-    "<!DOCTYPE html>\n"
-    "<html><head><title>HTTPServer</title></head>\n"
-    "<body><center><h1> Hello mr. Client</h1>\n"
-    "</center></body></html>\n";
     //memsetting the html buffer to zero
     memset(client->html, 0, sizeof(client->html));
-    //copying the html code into the appropriate buffer
-    strcpy(client->html, html_stuff);
+    //sppending all the html code that is needed to generate a page
+    strcat(client->html, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n");
+    strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n<body><h1>");
+    strcat(client->html, "http://foo.com/");
+    //adding the url to the buffer
+    strcat(client->html, client->url_buffer);
+    strcat(client->html, " ");
+    //adding the ip address to the budder
+    strcat(client->html, client->ip_address);
+    strcat(client->html, ":");
+    //a buffer for the port number
+    char port_fix[16];
+    //manipulating the port number to be useable as a char pointer
+    snprintf(port_fix, 16, "%d", client->port);
+    //adding the port number to the buffer
+    strcat(client->html, port_fix);
+    //closing the html page
+    strcat(client->html, "</h1>\r\n</body></html>\r\n");
 }
 //*************************************
 // Writing to a log file in the root directory
@@ -229,7 +234,7 @@ void write_to_log(client_info* client){
     fclose(file);
 }
 //*************************************
-// Aquiring the url from a specific client
+// Acquiring the url from a specific client
 //*************************************
 void get_url(server_info* server){
     //setting the buffer to zero
