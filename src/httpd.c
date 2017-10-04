@@ -40,6 +40,7 @@ typedef struct
 }server_info;
 
 void startup_server(server_info* server, const char* port);
+void run_server(server_info* server, client_info* client);
 int accept_request(client_info* client, server_info* server);
 void get_client_information(client_info* client);
 void receive_message(server_info* server, int* connfd);
@@ -53,45 +54,18 @@ void get_url(server_info* server);
 void get_post_data(server_info* server);
 void client_handle(server_info* server, client_info* client, int* connfd);
 void error_handler(char* error_buffer);
+
 int main(int argc, char **argv)
 {
     char* welcome_port = argv[1];
     server_info server;
     client_info client;
-
     fprintf(stdout, "Listening to server number: %s\n", welcome_port); fflush(stdout);  
     startup_server(&server, welcome_port);
+    run_server(&server, &client);
 
-    fprintf(stdout, "Socket set up complete. Listening for request.\n"); fflush(stdout);
-    
-    while(1) {
-
-        fprintf(stdout, "Waiting to receive message...\n"); fflush(stdout);
-        int connfd = accept_request(&client, &server);
-
-        get_client_information(&client);
-        //fprintf(stdout, "From ip address: %s. Port number: %hu\n", client.ip_address, client.port); fflush(stdout);
-
-        receive_message(&server, &connfd);
-
-        get_header_type(&server, &client);
-        get_url(&server);
-
-
-
-        fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
-        fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
-        
-
-        client_handle(&server, &client, &connfd);
-        //fprintf(stdout, "URL...:%s\n", client.url_buffer); fflush(stdout);
-        write_to_log(&client);
-
-        // Close the connection.
-        shutdown(connfd, SHUT_RDWR);
-        close(connfd);
-    }
 }
+
 /*************************************************************************/
 /*  Starting up the server, binding and listening to appropriate port    */
 /*************************************************************************/
@@ -111,8 +85,40 @@ void startup_server(server_info* server, const char* port){
     //if listen returns less then 0 then an error has occured
     if(listen(server->sockfd, QUEUED) < 0){error_handler("listen failed");}
 }
+/*************************************************************************/
+/*  Running the server loop and calling necessary functions              */
+/*************************************************************************/
+void run_server(server_info* server, client_info* client){
+
+    fprintf(stdout, "Socket set up complete. Listening for request.\n"); fflush(stdout);
+    
+    while(1) {
+
+        fprintf(stdout, "Waiting to receive message...\n"); fflush(stdout);
+        int connfd = accept_request(client, server);
+
+        get_client_information(client);
+        //fprintf(stdout, "From ip address: %s. Port number: %hu\n", client.ip_address, client.port); fflush(stdout);
+
+        receive_message(server, &connfd);
+
+        get_header_type(server, client);
+        get_url(server);
+
+        fprintf(stdout, "HEADER TYPE: %s\n", client->header_buffer);fflush(stdout);
+        fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server->buffer);fflush(stdout);
+
+        client_handle(server, client, &connfd);
+        //fprintf(stdout, "URL...:%s\n", client->url_buffer); fflush(stdout);
+        write_to_log(client);
+
+        // Close the connection.
+        shutdown(connfd, SHUT_RDWR);
+        close(connfd);
+    }    
+}
 /*************************************/
-/*  Accepting a requst from client   */
+/*  Accepting a request from client  */
 /*************************************/
 int accept_request(client_info* client, server_info* server){
     //setting the buffer to zero

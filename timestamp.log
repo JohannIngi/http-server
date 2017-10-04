@@ -42,3 +42,7 @@ Wed, 04 Oct 2017 : 127.0.0.1:15851 GET : fjuddirall : 200 OK
 Wed, 04 Oct 2017 : 127.0.0.1:16107 GET : favicon.ico : 200 OK 
 Wed, 04 Oct 2017 : 127.0.0.1:16363 POST : fjuddirall : 200 OK 
 Wed, 04 Oct 2017 : 127.0.0.1:16619 GET : favicon.ico : 200 OK 
+Wed, 04 Oct 2017 : 127.0.0.1:38379 GET : fjuddirall : 200 OK 
+Wed, 04 Oct 2017 : 127.0.0.1:38635 GET : favicon.ico : 200 OK 
+Wed, 04 Oct 2017 : 127.0.0.1:38891 POST : fjuddirall : 200 OK 
+Wed, 04 Oct 2017 : 127.0.0.1:39147 GET : favicon.ico : 200 OK 
