@@ -55,6 +55,9 @@ void get_post_data(server_info* server);
 void client_handle(server_info* server, client_info* client, int* connfd);
 void error_handler(char* error_buffer);
 
+/*********************************************************************************************************/
+/*  main function starts here and declares instances of the structs that are used thougout the server    */
+/*********************************************************************************************************/
 int main(int argc, char **argv)
 {
     char* welcome_port = argv[1];
@@ -234,11 +237,14 @@ void generate_html_post(client_info* client, server_info* server){
     snprintf(port_fix, 16, "%d", client->port);
     //adding the port number to the buffer
     strcat(client->html, port_fix);
-    strcat(client->html, "DATA: ");
-    get_post_data(server);
-    strcat(client->html, server->data_buffer);
     //adding a form to receive a post request
     strcat(client->html, "<form method=\"post\">\r\n<label for=\"name1\">Name1:</label>\r\n<input type=\"name\" name=\"name\">\r\n<label for=\"name2\">Name2:</label>\r\n<input type=\"name\" name=\"name\">\r\n<button>Submit</button>\r\n</form>");
+    strcat(client->html, "<table><tr><th>Data</th><th>something</th></tr><tr><td>");
+    get_post_data(server);
+    strcat(client->html, server->data_buffer);
+    strcat(client->html, "</td><td>something2</td></tr></table>");
+    
+    
     //closing the html page
     strcat(client->html, "\r\n</body></html>\r\n");
 }
