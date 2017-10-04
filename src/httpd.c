@@ -21,6 +21,7 @@ typedef struct
 {
     sockaddr_in address;
     socklen_t len;
+    char time_buffer[20];
     char header_buffer[1024];
     char url_buffer[1024];
     char html[4096];
@@ -41,10 +42,10 @@ int accept_request(client_info* client, server_info* server);
 void get_client_information(client_info* client);
 void receive_message(server_info* server, int* connfd);
 void get_header_type(server_info* server, client_info* client);
+void get_time(client_info* client);
 void client_handle(server_info* server, client_info* client, int* connfd);
-void generate_html(client_info* client);
+void generate_html_header(client_info* client);
 void generate_html_get(client_info* client);
-void generate_html_head(client_info* client);
 void generate_html_post(client_info* client);
 void write_to_log(client_info* client);
 void get_url(server_info* server);
@@ -158,6 +159,19 @@ void get_header_type(server_info* server, client_info* client){
     //releasing the memory that g_strsplit was using when splittin the string
     g_strfreev(header_type);
 }
+/*************************************************/
+/*  Setting the current date in a time buffer    */
+/*************************************************/
+void get_time(client_info* client){
+    //setting ISO time
+    time_t t;
+    time(&t);
+    struct tm* t_info;
+    //setting the buffer to zero
+    memset(client->time_buffer, 0, sizeof(client->time_buffer));
+    t_info = localtime(&t);
+    strftime(client->time_buffer, sizeof(client->time_buffer), "%a, %d %b %Y %X GMT", t_info);  
+}
 /*********************************************************************************************/
 /*  client handler that decides what to do based on the client request; get, post or head    */
 /*********************************************************************************************/
@@ -173,7 +187,9 @@ void client_handle(server_info* server, client_info* client, int* connfd){
     else if(g_str_match_string("POST", client->header_buffer, 1)){
         //copying the server url buffer from array index 6 into the client url buffer
         //strcpy(client->url_buffer, &server->url_for_all[6]);
-        generate_html_head(client);
+        generate_html_header(client);
+        //closing the html page
+        strcat(client->html, "\r\n</html>\r\n");
         send(*connfd, client->html, strlen(client->html), 0);
     }
     //checking if the header_buffer matches a HEAD request
@@ -190,18 +206,21 @@ void client_handle(server_info* server, client_info* client, int* connfd){
 /*************************************/
 /*  Hard-coded html for the client   */
 /*************************************/
-void generate_html(client_info* client){
+void generate_html_header(client_info* client){
     //memsetting the html buffer to zero
     memset(client->html, 0, sizeof(client->html));
     //appending all the html code that is needed to generate a page
-    strcat(client->html, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nserver: Awesome_server\r\ncharset=UTF-8\r\n\r\n");
+    strcat(client->html, "HTTP/1.1 200 OK\r\nDate: ");
+    get_time(client);
+    strcat(client->html, client->time_buffer);
+    strcat(client->html, "Content-Type: text/html\r\nserver: Awesome_Server 1.0\r\ncharset=UTF-8\r\n\r\n");
     
 }
 /*****************************************/
 /*  Hard-coded html for the get request  */
 /*****************************************/
 void generate_html_get(client_info* client){
-    generate_html(client);
+    generate_html_header(client);
     //appending all the html code that is needed to generate a page
     strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n");
     strcat(client->html, "<body>http://foo.com/");
@@ -222,19 +241,12 @@ void generate_html_get(client_info* client){
     //closing the html page
     strcat(client->html, "\r\n</body></html>\r\n");
 }
-/*********************************************/
-/*  Hard-coded html for the head request     */
-/*********************************************/
-void generate_html_head(client_info* client){
-    generate_html(client);
-    //closing the html page
-    strcat(client->html, "\r\n</html>\r\n");
-}
+
 /*********************************************/
 /*  Hard-coded html for the post request     */
 /*********************************************/
 void generate_html_post(client_info* client){
-    generate_html(client);
+    generate_html_header(client);
     //appending all the html code that is needed to generate a page
     strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n");
     strcat(client->html, "<body>http://foo.com/");
@@ -253,19 +265,12 @@ void generate_html_post(client_info* client){
     //closing the html page
     strcat(client->html, "\r\n</body></html>\r\n");
 }
+
 /*************************************************/
 /*  Writing to a log file in the root directory  */
 /*************************************************/
 void write_to_log(client_info* client){
-    //setting ISO time
-    time_t t;
-    time(&t);
-    struct tm* t_info;
-    char time_buffer[20];
-    //setting the buffer to zero
-    memset(time_buffer, 0, sizeof(time_buffer));
-    t_info = localtime(&t);
-    strftime(time_buffer, sizeof(time_buffer), "%a, %d %b %Y %X GMT", t_info);
+    get_time(client);
     //opening a file and logging a timestamp to it
     FILE* file;
     file = fopen("timestamp.log", "a");
@@ -274,7 +279,7 @@ void write_to_log(client_info* client){
         fflush(stdout);
     }
     else{
-        fprintf(file, "%s: ", time_buffer);
+        fprintf(file, "%s: ", client->time_buffer);
         fprintf(file, "%s:%hu ", client->ip_address, client->port);
         fprintf(file, "%s : ", client->header_buffer);
         fprintf(file, "%s:", client->url_buffer);
@@ -296,3 +301,4 @@ void get_url(server_info* server){
     g_strfreev(url_keeper);
 
 }
+
