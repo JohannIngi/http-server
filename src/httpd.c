@@ -52,7 +52,7 @@ void write_to_log(client_info* client);
 void get_url(server_info* server);
 void get_post_data(server_info* server);
 void client_handle(server_info* server, client_info* client, int* connfd);
-/*void error_handler(){}*/
+void error_handler(char* error_buffer);
 int main(int argc, char **argv)
 {
     char* welcome_port = argv[1];
@@ -106,16 +106,10 @@ void startup_server(server_info* server, const char* port){
     server->address.sin_port = htons(atoi(port));
     //bind to port
     //if bind returns less then 0 then an error has occured
-    if(bind(server->sockfd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) == -1){
-        perror("bind failed...");
-        exit(EXIT_FAILURE);
-    }
+    if(bind(server->sockfd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("bind failed");}
     //Server is listening to the port in order to accept messages. A backlog of five connections is allowed
     //if listen returns less then 0 then an error has occured
-    if(listen(server->sockfd, QUEUED) == -1){
-        perror("listen failed...");
-        exit(EXIT_FAILURE);
-    }
+    if(listen(server->sockfd, QUEUED) < 0){error_handler("listen failed");}
 }
 /*************************************/
 /*  Accepting a requst from client   */
@@ -126,10 +120,7 @@ int accept_request(client_info* client, server_info* server){
     client->len = (socklen_t) sizeof(sockaddr_in);
     int connfd = accept(server->sockfd, (sockaddr *) &client->address, &client->len);
     //if -1 then the client is inactive
-    if (connfd == -1) { 
-        perror("accept failed...");
-        exit(EXIT_FAILURE);
-    }
+    if (connfd < 0){error_handler("accepting message failed");}
     return connfd;
 }
 /*************************************/
@@ -255,10 +246,11 @@ void write_to_log(client_info* client){
     FILE* file;
     file = fopen("timestamp.log", "a");
     if (file == NULL) {
-        fprintf(stdout, "Error!");
+        fprintf(stdout, "Error in opening file!");
         fflush(stdout);
     }
     else{
+        //writing all necessary things to the timestamp
         fprintf(file, "%s: ", client->time_buffer);
         fprintf(file, "%s:%hu ", client->ip_address, client->port);
         fprintf(file, "%s : ", client->header_buffer);
@@ -276,7 +268,7 @@ void get_url(server_info* server){
     //splitting the client buffer where HTTP begins
     char** url_keeper = g_strsplit(server->buffer, "HTTP", -1);
     //adding the content to the appropriate buffer
-    strcat(server->url_for_all, *url_keeper);
+    strcat(server->url_for_all, url_keeper[0]);
     //releasing the memory that g_strsplit was using when splittin the string
     g_strfreev(url_keeper);
 }
@@ -324,9 +316,11 @@ void client_handle(server_info* server, client_info* client, int* connfd){
         send(*connfd, client->html, strlen(client->html), 0);
 
     }
-    else{
-        perror("No match to head-type");
-        exit(EXIT_FAILURE);
-
-    }
+    else{error_handler("No match to header-type!");}
+}
+void error_handler(char* error_buffer){
+    //printing error using the function perror()
+    perror(error_buffer);
+    //exiting using a predefined macro
+    exit(EXIT_FAILURE);
 }
