@@ -21,6 +21,7 @@ typedef struct
 {
     sockaddr_in address;
     socklen_t len;
+    //char data[2048];
     char time_buffer[20];
     char header_buffer[1024];
     char url_buffer[1024];
@@ -34,6 +35,7 @@ typedef struct
     sockaddr_in address;
     char buffer[4096];
     char url_for_all[1024];
+    char data_buffer[2048];
     
 }server_info;
 
@@ -43,12 +45,13 @@ void get_client_information(client_info* client);
 void receive_message(server_info* server, int* connfd);
 void get_header_type(server_info* server, client_info* client);
 void get_time(client_info* client);
-void client_handle(server_info* server, client_info* client, int* connfd);
 void generate_html_header(client_info* client);
 void generate_html_get(client_info* client);
-void generate_html_post(client_info* client);
+void generate_html_post(client_info* client, server_info* server);
 void write_to_log(client_info* client);
 void get_url(server_info* server);
+void get_post_data(server_info* server);
+void client_handle(server_info* server, client_info* client, int* connfd);
 /*void error_handler(){}*/
 int main(int argc, char **argv)
 {
@@ -74,10 +77,12 @@ int main(int argc, char **argv)
         get_header_type(&server, &client);
         get_url(&server);
 
+
+
         fprintf(stdout, "HEADER TYPE: %s\n", client.header_buffer);fflush(stdout);
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server.buffer);fflush(stdout);
         
-        
+
         client_handle(&server, &client, &connfd);
         //fprintf(stdout, "URL...:%s\n", client.url_buffer); fflush(stdout);
         write_to_log(&client);
@@ -172,37 +177,7 @@ void get_time(client_info* client){
     t_info = localtime(&t);
     strftime(client->time_buffer, sizeof(client->time_buffer), "%a, %d %b %Y %X GMT", t_info);  
 }
-/*********************************************************************************************/
-/*  client handler that decides what to do based on the client request; get, post or head    */
-/*********************************************************************************************/
-void client_handle(server_info* server, client_info* client, int* connfd){
-    //checking if the header_buffer matches a GET request
-    if(g_str_match_string("GET", client->header_buffer, 1)){
-        //copying the server url buffer from array index 5 into the client url buffer
-        strcpy(client->url_buffer, &server->url_for_all[5]);
-        generate_html_get(client);
-        send(*connfd, client->html, strlen(client->html), 0);
-    }
-    //checking if the header_buffer matches a POST request
-    else if(g_str_match_string("POST", client->header_buffer, 1)){
-        //copying the server url buffer from array index 6 into the client url buffer
-        //strcpy(client->url_buffer, &server->url_for_all[6]);
-        generate_html_header(client);
-        //closing the html page
-        strcat(client->html, "\r\n</html>\r\n");
-        send(*connfd, client->html, strlen(client->html), 0);
-    }
-    //checking if the header_buffer matches a HEAD request
-    else if(g_str_match_string("HEAD", client->header_buffer, 1)){
-        //copying the server url buffer from array index 6 into the client url buffer
-        strcpy(client->url_buffer, &server->url_for_all[6]);
-    }
-    else{
-        perror("No match to head-type");
-        exit(EXIT_FAILURE);
 
-    }
-}
 /*************************************/
 /*  Hard-coded html for the client   */
 /*************************************/
@@ -245,7 +220,7 @@ void generate_html_get(client_info* client){
 /*********************************************/
 /*  Hard-coded html for the post request     */
 /*********************************************/
-void generate_html_post(client_info* client){
+void generate_html_post(client_info* client, server_info* server){
     generate_html_header(client);
     //appending all the html code that is needed to generate a page
     strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n");
@@ -262,6 +237,11 @@ void generate_html_post(client_info* client){
     snprintf(port_fix, 16, "%d", client->port);
     //adding the port number to the buffer
     strcat(client->html, port_fix);
+    strcat(client->html, "DATA: ");
+    get_post_data(server);
+    strcat(client->html, server->data_buffer);
+    //adding a form to receive a post request
+    strcat(client->html, "<form method=\"post\">\r\n<label for=\"name1\">Name1:</label>\r\n<input type=\"name\" name=\"name\">\r\n<label for=\"name2\">Name2:</label>\r\n<input type=\"name\" name=\"name\">\r\n<button>Submit</button>\r\n</form>");
     //closing the html page
     strcat(client->html, "\r\n</body></html>\r\n");
 }
@@ -299,6 +279,54 @@ void get_url(server_info* server){
     strcat(server->url_for_all, *url_keeper);
     //releasing the memory that g_strsplit was using when splittin the string
     g_strfreev(url_keeper);
-
 }
+/*************************************************/
+/*  Acquiring the data from the post response    */
+/*************************************************/
+void get_post_data(server_info* server){
+    //setting the buffer to zero
+    memset(server->data_buffer, 0, sizeof(server->data_buffer));
+    //splitting the client buffer where HTTP begins
+    char** data = g_strsplit(server->buffer, "\r\n\r\n", -1);
+    //adding the content to the appropriate buffer
+    strcat(server->data_buffer, data[1]);
+    //releasing the memory that g_strsplit was using when splittin the string
+    g_strfreev(data);
+}
+/*********************************************************************************************/
+/*  client handler that decides what to do based on the client request; get, post or head    */
+/*********************************************************************************************/
+void client_handle(server_info* server, client_info* client, int* connfd){
+    //checking if the header_buffer matches a GET request
+    if(g_str_match_string("GET", client->header_buffer, 1)){
+        //copying the server url buffer from array index 5 into the client url buffer
+        strcpy(client->url_buffer, &server->url_for_all[5]);
+        generate_html_get(client);
+        //sending the page
+        send(*connfd, client->html, strlen(client->html), 0);
+    }
+    //checking if the header_buffer matches a POST request
+    else if(g_str_match_string("POST", client->header_buffer, 1)){
+        //copying the server url buffer from array index 6 into the client url buffer
+        strcpy(client->url_buffer, &server->url_for_all[6]);
+        generate_html_post(client, server);
+        //fprintf(stdout, "DATA FOR POST: %s\n", server->data_buffer);fflush(stdout);
+        send(*connfd, client->html, strlen(client->html), 0);
+ 
+    }
+    //checking if the header_buffer matches a HEAD request
+    else if(g_str_match_string("HEAD", client->header_buffer, 1)){
+        //copying the server url buffer from array index 6 into the client url buffer
+        //strcpy(client->url_buffer, &server->url_for_all[6]);
+        generate_html_header(client);
+        //closing the html page
+        strcat(client->html, "\r\n</html>\r\n");
+        send(*connfd, client->html, strlen(client->html), 0);
 
+    }
+    else{
+        perror("No match to head-type");
+        exit(EXIT_FAILURE);
+
+    }
+}
