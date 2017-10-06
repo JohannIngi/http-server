@@ -13,6 +13,16 @@
 
 #define QUEUED 5
 
+// TODO: fake_job is just to check if some function need handling to remove warnings - remove at end product
+void fake_job() {
+    printf("_");
+}
+
+void debug(const char* msg) {
+    fprintf(stdout, msg); fflush(stdout);
+    putchar('\n');
+}
+
 
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
@@ -46,9 +56,10 @@ void get_client_information(client_info* client);
 void receive_message(server_info* server, int* connfd);
 void get_header_type(server_info* server, client_info* client);
 void get_time(client_info* client);
-void generate_html_header(client_info* client);
+void generate_html_header(client_info* client, int response_code);
 void generate_html_get(client_info* client);
 void generate_html_post(client_info* client, server_info* server);
+void generate_404_error(client_info* client);
 void write_to_log(client_info* client);
 void get_url(server_info* server);
 void get_post_data(server_info* server);
@@ -60,6 +71,7 @@ void error_handler(char* error_buffer);
 /*********************************************************************************************************/
 int main(int argc, char **argv)
 {
+    if (argc != 2) error_handler("invalid arguments");
     char* welcome_port = argv[1];
     server_info server;
     client_info client;
@@ -112,7 +124,7 @@ void run_server(server_info* server, client_info* client){
         fprintf(stdout, "Received message:\n\n--------------------\n%s\n", server->buffer);fflush(stdout);
 
         client_handle(server, client, &connfd);
-        //fprintf(stdout, "URL...:%s\n", client->url_buffer); fflush(stdout);
+        fprintf(stdout, "URL...:%s\n", client->url_buffer); fflush(stdout);
         write_to_log(client);
 
         // Close the connection.
@@ -181,11 +193,27 @@ void get_time(client_info* client){
 /*************************************/
 /*  Hard-coded html for the client   */
 /*************************************/
-void generate_html_header(client_info* client){
+void generate_html_header(client_info* client, int response_code){
+
+    // TODO: check if u can ask for head on a specific sub-url and if so - 404 on invalids
+
+    char tmp_response_code[4];
+    //memsetting the response code buffer to zero
+    memset(tmp_response_code, 0, sizeof(tmp_response_code));
+    //converting the response_code from int to string
+    sprintf(tmp_response_code, "%d", response_code);
+
     //memsetting the html buffer to zero
     memset(client->html, 0, sizeof(client->html));
     //appending all the html code that is needed to generate a page
-    strcat(client->html, "HTTP/1.1 200 OK\r\nDate: ");
+    strcat(client->html, "HTTP/1.1 ");
+    strcat(client->html, tmp_response_code);
+    if(strcmp(tmp_response_code, "404")){
+        strcat(client->html, "\r\nDate: ");
+    }else{
+        strcat(client->html, "OK\r\nDate: ");
+    }
+
     get_time(client);
     strcat(client->html, client->time_buffer);
     strcat(client->html, "Content-Type: text/html\r\nserver: Awesome_Server 1.0\r\ncharset=UTF-8\r\n\r\n");
@@ -195,7 +223,7 @@ void generate_html_header(client_info* client){
 /*  Hard-coded html for the get request  */
 /*****************************************/
 void generate_html_get(client_info* client){
-    generate_html_header(client);
+    generate_html_header(client, 200);
     //appending all the html code that is needed to generate a page
     strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n");
     strcat(client->html, "<body>http://foo.com/");
@@ -208,7 +236,7 @@ void generate_html_get(client_info* client){
     //a buffer for the port number
     char port_fix[16];
     //manipulating the port number to be useable as a char pointer
-    snprintf(port_fix, 16, "%d", client->port);
+    sprintf(port_fix, "%d", client->port);
     //adding the port number to the buffer
     strcat(client->html, port_fix);
     //adding a form to receive a post request
@@ -221,7 +249,7 @@ void generate_html_get(client_info* client){
 /*  Hard-coded html for the post request     */
 /*********************************************/
 void generate_html_post(client_info* client, server_info* server){
-    generate_html_header(client);
+    generate_html_header(client, 200);
     //appending all the html code that is needed to generate a page
     strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n");
     strcat(client->html, "<body>http://foo.com/");
@@ -234,7 +262,7 @@ void generate_html_post(client_info* client, server_info* server){
     //a buffer for the port number
     char port_fix[16];
     //manipulating the port number to be useable as a char pointer
-    snprintf(port_fix, 16, "%d", client->port);
+    snprintf(port_fix, 16, "%d", client->port); // TODO: does snpritnf null terminate if smaller than n?
     //adding the port number to the buffer
     strcat(client->html, port_fix);
     //adding a form to receive a post request
@@ -248,7 +276,17 @@ void generate_html_post(client_info* client, server_info* server){
     //closing the html page
     strcat(client->html, "\r\n</body></html>\r\n");
 }
+/*************************************************/
+/*  Writing to a log file in the root directory  */
+/*************************************************/
+void generate_404_error(client_info* client){
+    generate_html_header(client, 404);
+    strcat(client->html, "<!DOCTYPE html>\r\n<html><head><title>HTTPServer</title></head>\r\n");
+    strcat(client->html, "<body>ERROR 404");
+    //closing the html page
+    strcat(client->html, "\r\n</body></html>\r\n");
 
+}
 /*************************************************/
 /*  Writing to a log file in the root directory  */
 /*************************************************/
@@ -259,7 +297,7 @@ void write_to_log(client_info* client){
     file = fopen("timestamp.log", "a");
     if (file == NULL) {
         fprintf(stdout, "Error in opening file!");
-        fflush(stdout);
+        fflush(stdout); 
     }
     else{
         //writing all necessary things to the timestamp
@@ -305,10 +343,24 @@ void client_handle(server_info* server, client_info* client, int* connfd){
     if(g_str_match_string("GET", client->header_buffer, 1)){
         //copying the server url buffer from array index 5 into the client url buffer
         strcpy(client->url_buffer, &server->url_for_all[5]);
-        generate_html_get(client);
-        //sending the page
-        send(*connfd, client->html, strlen(client->html), 0);
+        //if the buffer for the url contains more than a whitespace it should send 404 error
+        if(server->url_for_all[5] == ' '){
+            generate_html_get(client);
+            //sending the page
+            send(*connfd, client->html, strlen(client->html), 0);
+        }
+        else if(strcmp(client->url_buffer, "favicon.ico")){
+            debug("RECIEVED A FAV ICON - SENDING THAT FAGGOT SOME ERROR - COCKKKKKKKKKKKKKKKKKKKKK");
+            generate_404_error(client);
+            send(*connfd, client->html, strlen(client->html), 0);
+        }
+        //sending 404 error
+        else{
+            generate_404_error(client);
+            send(*connfd, client->html, strlen(client->html), 0);
+        }
     }
+    
     //checking if the header_buffer matches a POST request
     else if(g_str_match_string("POST", client->header_buffer, 1)){
         //copying the server url buffer from array index 6 into the client url buffer
@@ -322,7 +374,7 @@ void client_handle(server_info* server, client_info* client, int* connfd){
     else if(g_str_match_string("HEAD", client->header_buffer, 1)){
         //copying the server url buffer from array index 6 into the client url buffer
         //strcpy(client->url_buffer, &server->url_for_all[6]);
-        generate_html_header(client);
+        generate_html_header(client, 200);
         //closing the html page
         strcat(client->html, "\r\n</html>\r\n");
         send(*connfd, client->html, strlen(client->html), 0);
@@ -330,6 +382,7 @@ void client_handle(server_info* server, client_info* client, int* connfd){
     }
     else{error_handler("No match to header-type!");}
 }
+
 void error_handler(char* error_buffer){
     //printing error using the function perror()
     perror(error_buffer);
