@@ -54,8 +54,6 @@ void error_handler(char* error_buffer){
     exit(EXIT_FAILURE);
 }
 
-
-
 /****************************************************/
 /*  Finding the next available client               */
 /****************************************************/
@@ -94,17 +92,17 @@ void create_header(server_info* server, client_info* client, size_t content_len)
     memset(tmp, 0, 10);
     sprintf(tmp, "%zu", content_len);
     strcat(server->buffer, tmp);
-    strcat(server->buffer, "\r\n\r\n");
-    strcat(server->buffer, server->body_buffer);
+    if (content_len > 0) {
+        strcat(server->buffer, "\r\n\r\n");
+        strcat(server->buffer, server->body_buffer);
+    }
 }
-
 
 
 void handle_get(server_info* server, client_info* client, int connfd)
 {
     create_get_body(server, client);
     create_header(server, client, strlen(server->body_buffer));
-    fprintf(stdout, "%s\n", server->buffer);
     send(connfd, server->buffer, strlen(server->buffer), 0);
 }
 
@@ -153,7 +151,8 @@ void handle_post(server_info* server, client_info* client, int connfd, int index
 
 void handle_head(server_info* server, client_info* client, int connfd)
 {
-// TODO
+    create_header(server, client, 0);
+    send(connfd, server->buffer, strlen(server->buffer), 0);
 }
 
 int get_version(char* buffer, int* index)
@@ -186,7 +185,7 @@ int get_method(char* buffer, int* index)
         *index = 5;
         return HEAD;
     } else {
-        return INVALID;
+        return INVALID; // SEMDD 405 meth not allowed
     }
 }
 
@@ -205,12 +204,10 @@ void client_handle(server_info* server, client_info* client, int connfd){
     int method = get_method(server->buffer, &index);
     int home = is_home(server->buffer, &index);
     if (!home) {
-        //send_invalid();
+        //send_invalid(); // SEND 404 
         return;
     }
     int version = get_version(server->buffer, &index);
-
-    // WHEN I NEED TO USER HEADER:::: pass server->buffer + index and it will start at the first header field
 
     char* start_of_header = server->buffer + index;
     gchar** split = g_strsplit(start_of_header, "\r\n", -1);
