@@ -23,6 +23,8 @@
 #define VERSION_ONE 0
 #define VERSION_TWO 1
 
+#define MAX_TIME 30
+
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
 typedef struct pollfd pollfd;
@@ -70,8 +72,7 @@ void startup_server(server_info* server, const char* port);
 /*********************************************************************************************************/
 /*  main function starts here and declares instances of the structs that are used throughout the server    */
 /*********************************************************************************************************/
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
     if (argc != 2) error_handler("invalid arguments");
     char* welcome_port = argv[1];
     server_info server;
@@ -119,8 +120,7 @@ void get_time(client_info* client){
 /*************************************************************************/
 /*  Creating a html body for the GET method                              */
 /*************************************************************************/
-void create_get_body(server_info* server, client_info* client)
-{
+void create_get_body(server_info* server, client_info* client){
     memset(server->body_buffer, 0, sizeof(server->body_buffer));
     strcat(server->body_buffer, "<html><head><title>test</title></head><body>");
     char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
@@ -136,8 +136,7 @@ void create_get_body(server_info* server, client_info* client)
 /*************************************************************************/
 /*  Creating a html header to use in all the methods                     */
 /*************************************************************************/
-void create_header(server_info* server, client_info* client, size_t content_len)
-{
+void create_header(server_info* server, client_info* client, size_t content_len){
     memset(server->buffer, 0, sizeof(server->buffer));
     strcat(server->buffer, "HTTP/1.1 200 OK\r\nDate: ");
     get_time(client);
@@ -155,8 +154,7 @@ void create_header(server_info* server, client_info* client, size_t content_len)
 /*************************************************************************/
 /*  Handling GET requests                                                */
 /*************************************************************************/
-void handle_get(server_info* server, client_info* client, int connfd)
-{
+void handle_get(server_info* server, client_info* client, int connfd){
     create_get_body(server, client);
     create_header(server, client, strlen(server->body_buffer));
     send(connfd, server->buffer, strlen(server->buffer), 0);
@@ -164,8 +162,7 @@ void handle_get(server_info* server, client_info* client, int connfd)
 /*************************************************************************/
 /*  Creating a html body for the POST method                             */
 /*************************************************************************/
-void create_post_body(server_info* server, client_info* client, char* fields)
-{
+void create_post_body(server_info* server, client_info* client, char* fields){
     memset(server->body_buffer, 0, sizeof(server->body_buffer));
     strcat(server->body_buffer, "<html><head><title>test</title></head><body>http://foo.com/");
     char *ip = inet_ntoa(client->address.sin_addr);
@@ -181,8 +178,7 @@ void create_post_body(server_info* server, client_info* client, char* fields)
     //accessing the data fields using parsing
     gchar** split = g_strsplit(fields, "=", -1);
     int start = 0;
-    while (split[start] != NULL)
-    {
+    while (split[start] != NULL){
         strcat(server->body_buffer, split[start]);
         start++;
         if (split[start] != NULL) {
@@ -198,8 +194,7 @@ void create_post_body(server_info* server, client_info* client, char* fields)
 /*************************************************************************/
 /*  Handling POST requests                                               */
 /*************************************************************************/
-void handle_post(server_info* server, client_info* client, int connfd, int index)
-{
+void handle_post(server_info* server, client_info* client, int connfd, int index){
     char fields[1000]; // <--- move to server struct
     memset(fields, 0, sizeof(fields));
     strcpy(fields, server->buffer + index);
@@ -211,16 +206,14 @@ void handle_post(server_info* server, client_info* client, int connfd, int index
 /*************************************************************************/
 /*  Handling HEAD requests                                               */
 /*************************************************************************/
-void handle_head(server_info* server, client_info* client, int connfd)
-{
+void handle_head(server_info* server, client_info* client, int connfd){
     create_header(server, client, 0);
     send(connfd, server->buffer, strlen(server->buffer), 0);
 }
 /*************************************************************************/
 /*  Sending a 404 error if invalid requests                              */
 /*************************************************************************/
-void send_invalid(server_info* server, client_info* client, int connfd)
-{
+void send_invalid(server_info* server, client_info* client, int connfd){
     fprintf(stdout, "404 error"); fflush(stdout);
     memset(server->buffer, 0, sizeof(server->buffer));
     strcat(server->buffer, "HTTP/1.1 404 \r\nDate: ");
@@ -235,8 +228,7 @@ void send_invalid(server_info* server, client_info* client, int connfd)
 /*************************************************************************/
 /*  Acquiring the version of the http protocol                           */
 /*************************************************************************/
-int get_version(char* buffer, int* index)
-{
+int get_version(char* buffer, int* index){
     *index += 8;
     while (buffer[*index] == '\r' || buffer[*index] == '\n') {
         *index += 1;
@@ -246,8 +238,7 @@ int get_version(char* buffer, int* index)
 /*************************************************************************/
 /*  Returns true if url is legal                                         */
 /*************************************************************************/
-int is_home(char* buffer, int* index)
-{
+int is_home(char* buffer, int* index){
     int valid = buffer[*index] == '/' && buffer[*index + 1] == ' ';
     if (valid) {
         *index = *index + 2;
@@ -257,8 +248,7 @@ int is_home(char* buffer, int* index)
 /*************************************************************************/
 /*  Acquiring the appropriate method                                     */
 /*************************************************************************/
-int get_method(char* buffer, int* index)
-{
+int get_method(char* buffer, int* index){
     if(g_str_has_prefix(buffer, "GET")){
         *index = 4;
         return GET;
@@ -286,8 +276,7 @@ void write_to_log(client_info* client, server_info* server){
     if (file == NULL) {
         fprintf(stdout, "Error in opening file!");
         fflush(stdout); 
-    }
-    else{
+    } else{
         int index = 0;
         int method = get_method(server->buffer, &index);
         char tmp_method[10];
@@ -401,11 +390,10 @@ void add_new_client(server_info* server, client_info* clients) {
 /*************************************************************************/
 /*  If clients time out then close connection                            */
 /*************************************************************************/
-void check_for_timeouts(client_info* clients, server_info* server)
-{
+void check_for_timeouts(client_info* clients, server_info* server){
     time_t now;
     for(int i = 1; i < MAX_CLIENTS; i++){
-        if(difftime(time(&now), clients[i].timer) >= 30 && (server->fds[i].fd != -1)){
+        if(difftime(time(&now), clients[i].timer) >= MAX_TIME && (server->fds[i].fd != -1)){
             fprintf(stdout, "Client has timedout\n"); fflush(stdout);
 
             close(server->fds[i].fd);
@@ -439,7 +427,7 @@ void run_server(server_info* server, client_info* clients){
                         if(recv_msg_len == 0){
                             close(server->fds[i].fd);
                             server->fds[i].fd = -1;
-                        }else{
+                        } else{
                             server->buffer[recv_msg_len] = '\0';
                             client_handle(server, &clients[i], server->fds[i].fd);
                         }
