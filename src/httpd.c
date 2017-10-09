@@ -45,6 +45,41 @@ typedef struct
 }server_info;
 
 
+
+void error_handler(char* error_buffer);
+int find_next_available_client(pollfd* fds);
+void get_time(client_info* client);
+void create_get_body(server_info* server, client_info* client);
+void create_header(server_info* server, client_info* client, size_t content_len);
+void handle_get(server_info* server, client_info* client, int connfd);
+void create_post_body(server_info* server, client_info* client, char* fields);
+void handle_post(server_info* server, client_info* client, int connfd, int index);
+void handle_head(server_info* server, client_info* client, int connfd);
+void send_invalid(server_info* server, client_info* client, int connfd);
+int get_version(char* buffer, int* index);
+int is_home(char* buffer, int* index);
+int get_method(char* buffer, int* index);
+void write_to_log(client_info* client, server_info* server);
+void client_handle(server_info* server, client_info* client, int connfd);
+void setup_multiple_clients(server_info* server);
+void add_new_client(server_info* server, client_info* clients);
+void check_for_timeouts(client_info* clients, server_info* server);
+void run_server(server_info* server, client_info* clients);
+void startup_server(server_info* server, const char* port);
+
+/*********************************************************************************************************/
+/*  main function starts here and declares instances of the structs that are used throughout the server    */
+/*********************************************************************************************************/
+int main(int argc, char **argv)
+{
+    if (argc != 2) error_handler("invalid arguments");
+    char* welcome_port = argv[1];
+    server_info server;
+    client_info clients[MAX_CLIENTS];
+    fprintf(stdout, "Listening to server number: %s\n", welcome_port); fflush(stdout);  
+    startup_server(&server, welcome_port);
+    run_server(&server, clients);
+}
 /*************************************************************************/
 /*  Write out the error message that are sent to this function           */
 /*************************************************************************/
@@ -428,18 +463,4 @@ void startup_server(server_info* server, const char* port){
     server->address.sin_port = htons(atoi(port));
     if(bind(server->fds[0].fd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("bind failed");}
     if(listen(server->fds[0].fd, QUEUED) < 0){error_handler("listen failed");}
-}
-
-/*********************************************************************************************************/
-/*  main function starts here and declares instances of the structs that are used throughout the server    */
-/*********************************************************************************************************/
-int main(int argc, char **argv)
-{
-    if (argc != 2) error_handler("invalid arguments");
-    char* welcome_port = argv[1];
-    server_info server;
-    client_info clients[MAX_CLIENTS];
-    fprintf(stdout, "Listening to server number: %s\n", welcome_port); fflush(stdout);  
-    startup_server(&server, welcome_port);
-    run_server(&server, clients);
 }
