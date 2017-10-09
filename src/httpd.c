@@ -31,7 +31,7 @@ typedef struct
 {
     sockaddr_in address;
     int keep_alive;
-    // TODO TIME FIELD
+    time_t timer;
 } client_info;
 
 typedef struct
@@ -53,6 +53,8 @@ void error_handler(char* error_buffer){
     //exiting using a predefined macro
     exit(EXIT_FAILURE);
 }
+
+
 
 /****************************************************/
 /*  Finding the next available client               */
@@ -229,6 +231,10 @@ void client_handle(server_info* server, client_info* client, int connfd){
 
     if (client->keep_alive == -1) {
         client->keep_alive = (version == VERSION_TWO) ? 1 : 0;
+        if(client->keep_alive != 1){
+            close(server->fds->fd);
+            server->fds->fd = -1;
+        }
     }
 
     if(g_str_has_prefix(server->buffer, "GET")){
@@ -261,15 +267,24 @@ void add_new_client(server_info* server, client_info* clients) {
 
     socklen_t len = (socklen_t) sizeof(sockaddr_in);
     int next_client = find_next_available_client(server->fds); //iterates through all the fd's until he returns a client
-
+    
     memset(&clients[next_client].address, 0, sizeof(struct sockaddr_in));
     server->fds[next_client].fd = accept(server->fds[0].fd, (sockaddr*)&clients[next_client].address, &len);
+    clients[next_client].timer = time(NULL);
     server->fds[next_client].events = POLLIN;
 }
 
-void check_for_timeouts(/* whatever parameters you need... */) // TODO
+void check_for_timeouts(client_info* clients, server_info* server)
 {
+    time_t now;
+    for(int i = 1; i < MAX_CLIENTS; i++){
+        if(difftime(time(&now), clients[i].timer) >= 30 && (server->fds[i].fd != -1)){
+            fprintf(stdout, "Client has timedout\n"); fflush(stdout);
 
+            close(server->fds[i].fd);
+            server->fds[i].fd = -1;
+        }
+    }
 }
 
 /*************************************************************************/
@@ -291,6 +306,7 @@ void run_server(server_info* server, client_info* clients){
                         add_new_client(server, clients);
                     } else{
                         ssize_t recv_msg_len = recv(server->fds[i].fd, server->buffer, sizeof(server->buffer) -1, 0);
+                        clients[i].timer = time(NULL);
                         if(recv_msg_len == 0){
                             close(server->fds[i].fd);
                             server->fds[i].fd = -1;
@@ -302,8 +318,7 @@ void run_server(server_info* server, client_info* clients){
                 }
             }
         }
-        check_for_timeouts(/* whatever parameters you need... */);
-        // TODO 
+        check_for_timeouts(clients, server);
     }    
 }
 
