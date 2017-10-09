@@ -32,6 +32,7 @@ typedef struct
     sockaddr_in address;
     int keep_alive;
     time_t timer;
+    char time_buffer[64];
 } client_info;
 
 typedef struct
@@ -54,8 +55,6 @@ void error_handler(char* error_buffer){
     exit(EXIT_FAILURE);
 }
 
-
-
 /****************************************************/
 /*  Finding the next available client               */
 /****************************************************/
@@ -65,31 +64,50 @@ int find_next_available_client(pollfd* fds){
     for(i = 1; i < MAX_CLIENTS; i++){
         if(fds[i].fd == -1){
             fprintf(stdout, "index found: %d\n", i);
-            return i; //skila staðsetningunni sem er með laust pláss
+            return i; //returns the next available object
         }
     }
     return -1;
 }
-
+/*************************************************/
+/*  Setting the current date in a time buffer    */
+/*************************************************/
+void get_time(client_info* client){
+    //setting ISO time
+    time_t t;
+    time(&t);
+    struct tm* t_info;
+    memset(client->time_buffer, 0, sizeof(client->time_buffer));
+    t_info = localtime(&t);
+    strftime(client->time_buffer, sizeof(client->time_buffer), "%a, %d %b %Y %X GMT", t_info);  
+}
+/*************************************************************************/
+/*  Creating a html body for the GET method                              */
+/*************************************************************************/
 void create_get_body(server_info* server, client_info* client)
 {
     memset(server->body_buffer, 0, sizeof(server->body_buffer));
     strcat(server->body_buffer, "<html><head><title>test</title></head><body>");
-    char *ip = inet_ntoa(client->address.sin_addr);
+    char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
     strcat(server->body_buffer, ip);
-    strcat(server->body_buffer, "<br>");
+    strcat(server->body_buffer, ":");
     char tmp[6];
     memset(tmp, 0, 6);
-    sprintf(tmp, "%d", client->address.sin_port);
+    sprintf(tmp, "%d", client->address.sin_port); // getting the clients port
     strcat(server->body_buffer, tmp);
     strcat(server->body_buffer, "<br>");
     strcat(server->body_buffer, "<form method=\"post\">Field: <input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form></body></html>");
 }
-
+/*************************************************************************/
+/*  Creating a html header to use in all the methods                     */
+/*************************************************************************/
 void create_header(server_info* server, client_info* client, size_t content_len)
 {
     memset(server->buffer, 0, sizeof(server->buffer));
-    strcat(server->buffer, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ");
+    strcat(server->buffer, "HTTP/1.1 200 OK\r\nDate: ");
+    get_time(client);
+    strcat(server->buffer, client->time_buffer);
+    strcat(server->buffer, "Content-Type: text/html\r\nContent-Length: ");
     char tmp[10];
     memset(tmp, 0, 10);
     sprintf(tmp, "%zu", content_len);
@@ -99,22 +117,25 @@ void create_header(server_info* server, client_info* client, size_t content_len)
         strcat(server->buffer, server->body_buffer);
     }
 }
-
-
+/*************************************************************************/
+/*  Handling GET requests                                                */
+/*************************************************************************/
 void handle_get(server_info* server, client_info* client, int connfd)
 {
     create_get_body(server, client);
     create_header(server, client, strlen(server->body_buffer));
     send(connfd, server->buffer, strlen(server->buffer), 0);
 }
-
+/*************************************************************************/
+/*  Creating a html body for the POST method                             */
+/*************************************************************************/
 void create_post_body(server_info* server, client_info* client, char* fields)
 {
     memset(server->body_buffer, 0, sizeof(server->body_buffer));
-    strcat(server->body_buffer, "<html><head><title>test</title></head><body>");
+    strcat(server->body_buffer, "<html><head><title>test</title></head><body>http://foo.com/");
     char *ip = inet_ntoa(client->address.sin_addr);
     strcat(server->body_buffer, ip);
-    strcat(server->body_buffer, "<br>");
+    strcat(server->body_buffer, ":");
     char tmp[6];
     memset(tmp, 0, 6);
     sprintf(tmp, "%d", client->address.sin_port);
@@ -122,7 +143,7 @@ void create_post_body(server_info* server, client_info* client, char* fields)
     strcat(server->body_buffer, "<br>");
     strcat(server->body_buffer, "<form method=\"post\">Field: <input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form><br>");
 
-
+    //accessing the data fields using parsing
     gchar** split = g_strsplit(fields, "=", -1);
     int start = 0;
     while (split[start] != NULL)
@@ -139,7 +160,9 @@ void create_post_body(server_info* server, client_info* client, char* fields)
     strcat(server->body_buffer, "</body></html>");
     g_strfreev(split);
 }
-
+/*************************************************************************/
+/*  Handling POST requests                                               */
+/*************************************************************************/
 void handle_post(server_info* server, client_info* client, int connfd, int index)
 {
     char fields[1000]; // <--- move to server struct
@@ -150,13 +173,33 @@ void handle_post(server_info* server, client_info* client, int connfd, int index
     create_header(server, client, strlen(server->body_buffer));
     send(connfd, server->buffer, strlen(server->buffer), 0);
 }
-
+/*************************************************************************/
+/*  Handling HEAD requests                                               */
+/*************************************************************************/
 void handle_head(server_info* server, client_info* client, int connfd)
 {
     create_header(server, client, 0);
     send(connfd, server->buffer, strlen(server->buffer), 0);
 }
+/*************************************************************************/
+/*  Sending a 404 error if invalid requests                              */
+/*************************************************************************/
+void send_invalid(server_info* server, client_info* client, int connfd)
+{
+    fprintf(stdout, "404 error"); fflush(stdout);
+    memset(server->buffer, 0, sizeof(server->buffer));
+    strcat(server->buffer, "HTTP/1.1 404 \r\nDate: ");
+    get_time(client);
+    strcat(server->buffer, client->time_buffer);
+    strcat(server->buffer, "Content-Type: text/html\r\nContent-Length: 75\r\n\r\n");
+    strcat(server->buffer, "<html><head><title>test</title></head><body>");
+    strcat(server->buffer, "ERROR - NOT FOUND</body></html>");
+    send(connfd, server->buffer, strlen(server->buffer), 0);
 
+}
+/*************************************************************************/
+/*  Acquiring the version of the http protocol                           */
+/*************************************************************************/
 int get_version(char* buffer, int* index)
 {
     *index += 8;
@@ -165,7 +208,9 @@ int get_version(char* buffer, int* index)
     }
     return !strncmp(buffer + *index, "HTTP/1.1", 8) ? VERSION_TWO : VERSION_ONE;
 }
-
+/*************************************************************************/
+/*  Returns true if url is legal                                         */
+/*************************************************************************/
 int is_home(char* buffer, int* index)
 {
     int valid = buffer[*index] == '/' && buffer[*index + 1] == ' ';
@@ -174,7 +219,9 @@ int is_home(char* buffer, int* index)
     }
     return valid;
 }
-
+/*************************************************************************/
+/*  Acquiring the appropriate method                                     */
+/*************************************************************************/
 int get_method(char* buffer, int* index)
 {
     if(g_str_has_prefix(buffer, "GET")){
@@ -187,15 +234,54 @@ int get_method(char* buffer, int* index)
         *index = 5;
         return HEAD;
     } else {
-        return INVALID; // SEMDD 405 meth not allowed
+        return INVALID;
     }
 }
 
+
+/*************************************************/
+/*  Writing to a log file in the root directory  */
+/*************************************************/
+void write_to_log(client_info* client, server_info* server){
+
+    get_time(client);
+    //opening a file and logging a timestamp to it
+    FILE* file;
+    file = fopen("timestamp.log", "a");
+    if (file == NULL) {
+        fprintf(stdout, "Error in opening file!");
+        fflush(stdout); 
+    }
+    else{
+        int index = 0;
+        int method = get_method(server->buffer, &index);
+        char tmp_method[10];
+        switch(method)
+        {
+            case GET:
+                strcat(tmp_method, "GET");
+                break;
+            case POST:
+                strcat(tmp_method, "POST");
+                break;
+            case HEAD:
+                strcat(tmp_method, "HEAD");
+                break;
+        }
+        //writing all necessary things to the timestamp
+        fprintf(file, "%s: ", client->time_buffer);
+        fprintf(file, "%s:%d ", inet_ntoa(client->address.sin_addr), client->address.sin_port);
+        fprintf(file, "%s : ", tmp_method);
+        fprintf(file, "%s:", "/");
+        fprintf(file, " 200 OK \n");
+    }
+    fclose(file);
+}
 /*********************************************************************************************/
 /*  client handler that decides what to do based on the client request; get, post or head    */
 /*********************************************************************************************/
 void client_handle(server_info* server, client_info* client, int connfd){
-
+    write_to_log(client, server);
 
     fprintf(stdout, "%s\n", server->buffer); fflush(stdout);
 
@@ -206,11 +292,11 @@ void client_handle(server_info* server, client_info* client, int connfd){
     int method = get_method(server->buffer, &index);
     int home = is_home(server->buffer, &index);
     if (!home) {
-        //send_invalid(); // SEND 404 
+        send_invalid(server, client, connfd); // SEND 404 
         return;
     }
     int version = get_version(server->buffer, &index);
-
+    //parsing all the header
     char* start_of_header = server->buffer + index;
     gchar** split = g_strsplit(start_of_header, "\r\n", -1);
     int start = 0;
@@ -228,13 +314,15 @@ void client_handle(server_info* server, client_info* client, int connfd){
         }
         start++;
     }
-
+    //checks if the keep alive 
     if (client->keep_alive == -1) {
         client->keep_alive = (version == VERSION_TWO) ? 1 : 0;
-        if(client->keep_alive != 1){
-            close(server->fds->fd);
-            server->fds->fd = -1;
-        }
+ 
+    }
+    //if keep alive is not requested or protocol is http 1.0
+   if(client->keep_alive != 1){
+    close(server->fds->fd);
+    server->fds->fd = -1;
     }
 
     if(g_str_has_prefix(server->buffer, "GET")){
@@ -242,9 +330,9 @@ void client_handle(server_info* server, client_info* client, int connfd){
     } else if(g_str_has_prefix(server->buffer, "POST")){
         handle_post(server, client, connfd, index);
     } else if (g_str_has_prefix(server->buffer, "HEAD")) {
-        handle_head(server, client, connfd); // TODO
+        handle_head(server, client, connfd);
     } else {
-        //send_invalid(); // TODO
+        send_invalid(server, client, connfd);
     }
 
     g_strfreev(split);
@@ -262,18 +350,22 @@ void setup_multiple_clients(server_info* server){
     }
     server->fds[0].events = POLLIN;
 }
-
+/*************************************************************************/
+/*  Adding new clients to the server                                     */
+/*************************************************************************/
 void add_new_client(server_info* server, client_info* clients) {
 
     socklen_t len = (socklen_t) sizeof(sockaddr_in);
     int next_client = find_next_available_client(server->fds); //iterates through all the fd's until he returns a client
-    
+    if(next_client < 0){ error_handler("Accept failed");}
     memset(&clients[next_client].address, 0, sizeof(struct sockaddr_in));
     server->fds[next_client].fd = accept(server->fds[0].fd, (sockaddr*)&clients[next_client].address, &len);
     clients[next_client].timer = time(NULL);
     server->fds[next_client].events = POLLIN;
 }
-
+/*************************************************************************/
+/*  If clients time out then close connection                            */
+/*************************************************************************/
 void check_for_timeouts(client_info* clients, server_info* server)
 {
     time_t now;
@@ -306,7 +398,9 @@ void run_server(server_info* server, client_info* clients){
                         add_new_client(server, clients);
                     } else{
                         ssize_t recv_msg_len = recv(server->fds[i].fd, server->buffer, sizeof(server->buffer) -1, 0);
+                        if(recv_msg_len < 0){ error_handler("Receive failed");}
                         clients[i].timer = time(NULL);
+
                         if(recv_msg_len == 0){
                             close(server->fds[i].fd);
                             server->fds[i].fd = -1;
@@ -326,19 +420,13 @@ void run_server(server_info* server, client_info* clients){
 /*  Starting up the server, binding and listening to appropriate port    */
 /*************************************************************************/
 void startup_server(server_info* server, const char* port){
-    // Create and bind a TCP socket.
     server->fds[0].fd = socket(AF_INET, SOCK_STREAM, 0);
-    //If sockfd is some bullshit throw error!
     memset(&server->address, 0, sizeof(sockaddr_in));
     server->address.sin_family = AF_INET;
     //htonl and htons convert the bytes to be used by the network functions
     server->address.sin_addr.s_addr = htonl(INADDR_ANY);
     server->address.sin_port = htons(atoi(port));
-    //bind to port
-    //if bind returns less then 0 then an error has occured
     if(bind(server->fds[0].fd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("bind failed");}
-    //Server is listening to the port in order to accept messages. A backlog of five connections is allowed
-    //if listen returns less then 0 then an error has occured
     if(listen(server->fds[0].fd, QUEUED) < 0){error_handler("listen failed");}
 }
 
