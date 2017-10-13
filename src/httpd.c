@@ -70,7 +70,7 @@ void run_server(server_info* server, client_info* clients);
 void startup_server(server_info* server, const char* port);
 
 /*********************************************************************************************************/
-/*  main function starts here and declares instances of the structs that are used throughout the server    */
+/*  main function starts here and declares instances of the structs that are used throughout the server  */
 /*********************************************************************************************************/
 int main(int argc, char **argv){
     if (argc != 2) error_handler("invalid arguments");
