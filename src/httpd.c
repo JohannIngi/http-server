@@ -35,6 +35,8 @@ typedef struct
     time_t timer;
     char time_buffer[64];
     char method[8];
+    char color[16];
+    char query_buffer[1024];
     GHashTable* client_headers;
 } client_info;
 
@@ -63,10 +65,12 @@ void add_new_client(server_info* server, client_info* clients);
 void check_for_timeouts(client_info* clients, server_info* server);
 void run_server(server_info* server, client_info* clients);
 void startup_server(server_info* server, const char* port);
-void parse(server_info* server, client_info* client);
+void parse(server_info* server, client_info* client, int connfd);
 void set_method(client_info* client);
 void set_keep_alive(client_info* client);
-void send_error(server_info* server, client_info* client, char* error_version, char* error_msg, size_t content_len);
+void generate_error(server_info* server, client_info* client, char* error_version, char* error_msg, size_t content_len);
+void send_error();
+void parse_query(server_info* server, client_info* client, int connfd, char** first_line);
 
 
 int main(int argc, char **argv){
@@ -116,7 +120,8 @@ void write_to_log(client_info* client){
     if (file == NULL) {
         fprintf(stdout, "Error in opening file!");
         fflush(stdout); 
-    } else{
+    }
+    else{
         //writing all necessary things to the timestamp
         fprintf(file, "%s: ", client->time_buffer);
         fprintf(file, "%s:%d ", inet_ntoa(client->address.sin_addr), client->address.sin_port);
@@ -129,13 +134,14 @@ void write_to_log(client_info* client){
 void client_handle(server_info* server, client_info* client, int connfd){
 
     //fprintf(stdout, "%s\n", server->buffer); fflush(stdout);
-    parse(server, client);
+    parse(server, client, connfd);
 
-    //TODO! setja upp fall sem sækir method úr hastable, nota g_hastable_lookupð
     set_method(client);
+
    // fprintf(stdout, "--------------------------------------\n");fflush(stdout);
    // fprintf(stdout, "-----THIS IS THE METHOD 8====> %s\n", client->method);fflush(stdout);
     //fprintf(stdout, "----------------( . )( . )------------\n");fflush(stdout);
+
     set_keep_alive(client);
     
     if(g_strcmp0(client->method, "GET") == 0){
@@ -157,8 +163,8 @@ void client_handle(server_info* server, client_info* client, int connfd){
     else{
         char error_version[] = {"HTTP/1.1 501"};
         char error_msg[] = {"Invalid method!"};
-        send_error(server, client, error_version, error_msg, sizeof(error_msg));
-        send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
+        generate_error(server, client, error_version, error_msg, sizeof(error_msg));
+        send_error(server, connfd);
     }
 }
 
@@ -181,12 +187,13 @@ void set_keep_alive(client_info* client){
     char* tmp = (char*)g_hash_table_lookup(client->client_headers, "Connection");
     if(g_strcmp0(tmp, "keep-alive") == 0){
         client->keep_alive = 1; //there is asked for a keep alive
-    }else{
+    }
+    else{
         client->keep_alive = 0; // no need for keep alive
     }
 }
 
-void send_error(server_info* server, client_info* client, char* error_version, char* error_msg, size_t content_len){
+void generate_error(server_info* server, client_info* client, char* error_version, char* error_msg, size_t content_len){
     memset(server->header_buffer, 0, sizeof(server->header_buffer));
     strcat(server->header_buffer, error_version);
     strcat(server->header_buffer, "\r\nDate: ");
@@ -198,9 +205,13 @@ void send_error(server_info* server, client_info* client, char* error_version, c
     sprintf(tmp, "%zu", content_len + 58);
     strcat(server->header_buffer, tmp);
     strcat(server->header_buffer, "\r\n\r\n");
-    strcat(server->header_buffer, "<html><head><title>test</title></head><body>");
+    strcat(server->header_buffer, "<html><head><title>test</title></head><body><center>");
     strcat(server->header_buffer, error_msg);
-    strcat(server->header_buffer, "</body></html>");
+    strcat(server->header_buffer, "</center></body></html>");
+}
+
+void send_error(server_info* server, int connfd){
+    send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
 }
 
 void create_header(server_info* server, client_info* client, size_t content_len){
@@ -236,7 +247,9 @@ void create_header(server_info* server, client_info* client, size_t content_len)
 
 void handle_get(server_info* server, client_info* client){
     memset(server->buffer, 0, sizeof(server->buffer));
-    strcat(server->buffer, "<html><head><title>test</title></head><body><center>Here is your ip address and port number: ");
+    strcat(server->buffer, "<html><head><title>test</title></head><body style=\"background-color: ");
+    strcat(server->buffer, client->color);
+    strcat(server->buffer, "\"><center>Here is your ip address and port number: ");
     char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
     strcat(server->buffer, ip);
     strcat(server->buffer, ":");
@@ -245,7 +258,9 @@ void handle_get(server_info* server, client_info* client){
     sprintf(tmp, "%d", client->address.sin_port); // getting the clients port
     strcat(server->buffer, tmp);
     strcat(server->buffer, "<br>");
-    strcat(server->buffer, "<form method=\"post\">Enter something awesome into this field box<br><input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form></center></body></html>");
+    strcat(server->buffer, "<form method=\"post\">Enter something awesome into this field box<br><input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form>");
+    strcat(server->buffer, client->query_buffer);
+    strcat(server->buffer, "</center></body></html>");
 }
 
 void handle_post(server_info* server, client_info* client){
@@ -265,8 +280,8 @@ void handle_post(server_info* server, client_info* client){
     
 
     //fprintf(stdout, "THIS IS fields: %s\n", server->fields);fflush(stdout);
-    char** sub_fields = g_strsplit(server->fields, "\r\n\r\n", -1);
-    char** split_fields = g_strsplit(sub_fields[1], "=", -1);
+    char** sub_fields = g_strsplit(server->fields, "\r\n\r\n", -1); //accesing the data fields that are accepted in the post request
+    char** split_fields = g_strsplit(sub_fields[1], "=", -1); // splitting the data fields on the '='
     //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[0]);fflush(stdout);
 
     //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[1]);fflush(stdout);
@@ -281,7 +296,7 @@ void handle_post(server_info* server, client_info* client){
         }
         strcat(server->buffer, "<br>");
     }
-
+    strcat(server->buffer, client->query_buffer);
     strcat(server->buffer, "</center></body></html>");
 
 
@@ -294,7 +309,7 @@ void for_each_func(gpointer key, gpointer val, gpointer data)
     printf("%s -> %s\n", ((char*)key), ((char*)val));
 }
 
-void parse(server_info* server, client_info* client){
+void parse(server_info* server, client_info* client, int connfd){
 
 
     char** tmp = g_strsplit(server->buffer, "\r\n", -1); //getting the first line
@@ -304,6 +319,11 @@ void parse(server_info* server, client_info* client){
     g_hash_table_insert(client->client_headers, g_strdup("METHOD"), g_strdup(first_line[0]));
     g_hash_table_insert(client->client_headers, g_strdup("URL"), g_strdup(first_line[1]));
     g_hash_table_insert(client->client_headers, g_strdup("VERSION"), g_strdup(first_line[2]));
+    
+    parse_query(server, client, connfd, first_line);
+
+
+
 
     int index = 1;
     while(tmp[index] != NULL){
@@ -322,8 +342,80 @@ void parse(server_info* server, client_info* client){
 
     g_strfreev(tmp);
     g_strfreev(first_line);
+    
+
 
     
+}
+
+void parse_query(server_info* server, client_info* client, int connfd, char** first_line){
+    char** tmp_query = g_strsplit(first_line[1], "?", -1);
+    //fprintf(stdout, "!!!THIS IS tmp_query: %s\n", tmp_query[0]);fflush(stdout);
+    if(g_strcmp0(tmp_query[0], "/color") == 0){
+        //add color
+        char** tmp_color = g_strsplit(tmp_query[1], "=", -1);
+        memset(client->color, 0, sizeof(client->color));
+        strcat(client->color, tmp_color[1]);
+        //fprintf(stdout, "!!!THIS IS COLOR: %s\n", tmp_color[1]);fflush(stdout);
+        g_strfreev(tmp_color);
+    }
+    else if(g_strcmp0(tmp_query[0], "/") == 0){
+        //normal get response
+        memset(client->color, 0, sizeof(client->color));
+        strcat(client->color, "white");
+    }
+    else if(g_strcmp0(tmp_query[0], "/test") == 0){
+        //do something - show query one in each line
+        memset(client->query_buffer, 0, sizeof(client->query_buffer));
+        char** tmp_tester = g_strsplit(tmp_query[1], "&", -1);
+
+        if(tmp_tester[0] == NULL || tmp_tester[1] == NULL){
+            char** tmp_test = g_strsplit(tmp_query[1], "=", -1);
+            int start = 0;
+            while (tmp_test[start] != NULL){
+                strcat(client->query_buffer, tmp_test[start]);
+                start++;
+                if(tmp_test[start] != NULL){
+                    strcat(client->query_buffer, " ----> ");
+                    strcat(client->query_buffer, tmp_test[start]);
+                    //strcat(server->buffer, "<br>");
+                    start++;
+                }
+                strcat(client->query_buffer, "<br>");
+            }
+            g_strfreev(tmp_test);
+            g_strfreev(tmp_tester);
+        }
+        else{
+            int start = 0;
+            char** tmp_test;
+            while(tmp_tester[start] != NULL){
+                tmp_test = g_strsplit(tmp_tester[start], "=", -1);
+                strcat(client->query_buffer, tmp_test[0]);
+                strcat(client->query_buffer, " ----> ");
+                strcat(client->query_buffer,  tmp_test[1]);
+                //strcat(server->buffer, "<br>");
+                start++;
+                strcat(client->query_buffer, "<br>");
+            }
+            g_strfreev(tmp_test);
+            g_strfreev(tmp_tester);
+        }
+
+    }
+    else if(g_strcmp0(tmp_query[0], "/home") == 0){
+        //funZone for get
+        memset(client->color, 0, sizeof(client->color));
+        strcat(client->color, "purple");
+    }
+    else{ //it is an invalid url
+        char error_version[] = {"HTTP/1.1 404"};
+        char error_msg[] = {"INVALID URL!"};
+        generate_error(server, client, error_version, error_msg, sizeof(error_msg));
+        send_error(server, connfd);
+    }
+
+    g_strfreev(tmp_query);
 }
 
 void setup_multiple_clients(server_info* server){
