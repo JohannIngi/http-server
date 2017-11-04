@@ -36,6 +36,7 @@ typedef struct
     char time_buffer[64];
     char method[8];
     char color[16];
+    char data_buffer[1024];
     char query_buffer[1024];
     int isItColor;
     GHashTable* client_headers;
@@ -76,6 +77,7 @@ void parse_URL(server_info* server, client_info* client, int connfd, char** firs
 void add_queries(gpointer key, gpointer val, gpointer data);
 void parse_query(client_info* client, char** query);
 void set_color(client_info* client);
+void check_content(server_info* server);
 
 
 int main(int argc, char **argv){
@@ -152,12 +154,14 @@ void client_handle(server_info* server, client_info* client, int connfd){
     if(g_strcmp0(client->method, "GET") == 0){
         handle_get(server, client);
         create_header(server, client, strlen(server->buffer));
+        check_content(server);
         write_to_log(client);
         send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
     }
     else if(g_strcmp0(client->method, "POST") == 0){
         handle_post(server, client);
         create_header(server, client, strlen(server->buffer));
+        check_content(server);
         write_to_log(client);
         send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
     }
@@ -172,6 +176,16 @@ void client_handle(server_info* server, client_info* client, int connfd){
         generate_error(server, client, error_version, error_msg, sizeof(error_msg));
         send_error(server, connfd);
     }
+}
+
+//checking if there is some html content inside the server buffer to be displayed
+void check_content(server_info* server){
+        if (server->buffer != NULL) {
+            strcat(server->header_buffer, "\r\n\r\n");
+            strcat(server->header_buffer, server->buffer);
+        }else{
+            strcat(server->header_buffer, "\r\n\r\n");
+        }
 }
 
 void set_method(client_info* client){
@@ -254,12 +268,7 @@ void create_header(server_info* server, client_info* client, size_t content_len)
     sprintf(tmp, "%zu", content_len);
     strcat(server->header_buffer, tmp);
     fprintf(stdout, "Content length: %zu\n", content_len);fflush(stdout);
-    if (content_len > 0) {
-        strcat(server->header_buffer, "\r\n\r\n");
-        strcat(server->header_buffer, server->buffer);
-    }else{
-        strcat(server->header_buffer, "\r\n\r\n");
-    }
+
 }
 
 void handle_get(server_info* server, client_info* client){
@@ -284,7 +293,9 @@ void handle_post(server_info* server, client_info* client){
     memset(server->fields, 0, sizeof(server->fields));
     strcpy(server->fields, server->buffer);
     memset(server->buffer, 0, sizeof(server->buffer));
-    strcat(server->buffer, "<html><head><title>test</title></head><body><center>Here is your ip address and port number: ");
+    strcat(server->buffer, "<html><head><title>test</title></head><<body style=\"background-color: ");
+    strcat(server->buffer, client->color);
+    strcat(server->buffer, "\"><center>Here is your ip address and port number: ");
     char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
     strcat(server->buffer, ip);
     strcat(server->buffer, ":");
@@ -294,7 +305,6 @@ void handle_post(server_info* server, client_info* client){
     strcat(server->buffer, tmp);
     strcat(server->buffer, "<br>");
     strcat(server->buffer, "<form method=\"post\">Enter something awesome into this field box<br><input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form><br>");
-    
 
     //fprintf(stdout, "THIS IS fields: %s\n", server->fields);fflush(stdout);
     char** sub_fields = g_strsplit(server->fields, "\r\n\r\n", -1); //accesing the data fields that are accepted in the post request
@@ -304,15 +314,16 @@ void handle_post(server_info* server, client_info* client){
     //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[1]);fflush(stdout);
     int start = 0;
     while (split_fields[start] != NULL){
-        strcat(server->buffer, split_fields[start]);
+        strcat(client->data_buffer, split_fields[start]);
         start++;
         if (split_fields[start] != NULL) {
-            strcat(server->buffer, " ----> ");
-            strcat(server->buffer, split_fields[start]);
+            strcat(client->data_buffer, " ----> ");
+            strcat(client->data_buffer, split_fields[start]);
             start++;
         }
-        strcat(server->buffer, "<br>");
+        strcat(client->data_buffer, "<br>");
     }
+    strcat(server->buffer,client->data_buffer);
     if(client->isItColor != 1){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
 
     strcat(server->buffer, "</center></body></html>");
