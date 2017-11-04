@@ -233,12 +233,12 @@ void generate_error(server_info* server, client_info* client, char* error_versio
     strcat(server->header_buffer, "Content-Type: text/html\r\nContent-Length: ");
     char tmp[10];
     memset(tmp, 0, 10);
-    sprintf(tmp, "%zu", content_len + 58);
+    sprintf(tmp, "%zu", content_len + 67);
     strcat(server->header_buffer, tmp);
     strcat(server->header_buffer, "\r\n\r\n");
-    strcat(server->header_buffer, "<html><head><title>test</title></head><body><center>");
+    strcat(server->header_buffer, "<html><head><title>test</title></head><body><center><h1>");
     strcat(server->header_buffer, error_msg);
-    strcat(server->header_buffer, "</center></body></html>");
+    strcat(server->header_buffer, "</h1></center></body></html>");
 }
 
 void send_error(server_info* server, int connfd){
@@ -275,7 +275,7 @@ void handle_get(server_info* server, client_info* client){
     memset(server->buffer, 0, sizeof(server->buffer));
     strcat(server->buffer, "<html><head><title>test</title></head><body style=\"background-color: ");
     strcat(server->buffer, client->color);
-    strcat(server->buffer, "\"><center>Here is your ip address and port number: ");
+    strcat(server->buffer, "\"><center><h2>Here is your ip address and port number: ");
     char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
     strcat(server->buffer, ip);
     strcat(server->buffer, ":");
@@ -283,8 +283,12 @@ void handle_get(server_info* server, client_info* client){
     memset(tmp, 0, 6);
     sprintf(tmp, "%d", client->address.sin_port); // getting the clients port
     strcat(server->buffer, tmp);
-    strcat(server->buffer, "<br>");
-    strcat(server->buffer, "<form method=\"post\">Enter something awesome into this field box<br><input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form>");
+    strcat(server->buffer, "</h2><br>");
+    strcat(server->buffer, "<form method=\"post\"><h3>To go to the home page type: '/' in the url");
+    strcat(server->buffer, "<br>To go to the index page type: '/index' in the url");
+    strcat(server->buffer, "<br>To go to the color page type: '/color' in the url (example color query: ?bg=red");
+    strcat(server->buffer, "<br>To go to the test page type: '/test' in the url (example query: ?TSAM=AWESOME");
+    strcat(server->buffer, "<br>Enter something awesome into this field box and it will be displayed below<br></h3><input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form>");
     if(client->isItColor != 1){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
     strcat(server->buffer, "</center></body></html>");
 }
