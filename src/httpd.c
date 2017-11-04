@@ -37,7 +37,9 @@ typedef struct
     char method[8];
     char color[16];
     char query_buffer[1024];
+    int isItColor;
     GHashTable* client_headers;
+    GHashTable* client_queries;
 } client_info;
 
 typedef struct
@@ -70,7 +72,10 @@ void set_method(client_info* client);
 void set_keep_alive(client_info* client);
 void generate_error(server_info* server, client_info* client, char* error_version, char* error_msg, size_t content_len);
 void send_error();
-void parse_query(server_info* server, client_info* client, int connfd, char** first_line);
+void parse_URL(server_info* server, client_info* client, int connfd, char** first_line);
+void add_queries(gpointer key, gpointer val, gpointer data);
+void parse_query(client_info* client, char** query);
+void set_color(client_info* client);
 
 
 int main(int argc, char **argv){
@@ -157,7 +162,8 @@ void client_handle(server_info* server, client_info* client, int connfd){
         send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
     }
     else if(g_strcmp0(client->method, "HEAD") == 0){
-        create_header(server, client, 282);
+        handle_get(server, client);
+        create_header(server, client, strlen(server->buffer));
         send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
     }
     else{
@@ -181,6 +187,17 @@ void set_method(client_info* client){
         strcat(client->method, tmp);
     }
 
+}
+
+void set_color(client_info* client){
+    memset(client->color, 0, sizeof(client->color));
+    char* tmp = (char*)g_hash_table_lookup(client->client_queries, "bg");
+    if(tmp == NULL){
+        strcat(client->color, "white");
+    }
+    else{
+        strcat(client->color, tmp);
+    }
 }
 
 void set_keep_alive(client_info* client){
@@ -259,7 +276,7 @@ void handle_get(server_info* server, client_info* client){
     strcat(server->buffer, tmp);
     strcat(server->buffer, "<br>");
     strcat(server->buffer, "<form method=\"post\">Enter something awesome into this field box<br><input type=\"text\" name=\"pfield\"><br><input type=\"submit\" value=\"Submit\"></form>");
-    strcat(server->buffer, client->query_buffer);
+    if(client->isItColor != 1){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
     strcat(server->buffer, "</center></body></html>");
 }
 
@@ -296,9 +313,9 @@ void handle_post(server_info* server, client_info* client){
         }
         strcat(server->buffer, "<br>");
     }
-    strcat(server->buffer, client->query_buffer);
-    strcat(server->buffer, "</center></body></html>");
+    if(client->isItColor != 1){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
 
+    strcat(server->buffer, "</center></body></html>");
 
     g_strfreev(sub_fields);
     g_strfreev(split_fields);
@@ -309,21 +326,24 @@ void for_each_func(gpointer key, gpointer val, gpointer data)
     printf("%s -> %s\n", ((char*)key), ((char*)val));
 }
 
+void add_queries(gpointer key, gpointer val, gpointer data){
+    char* buffer = (char*)data;
+    strcat(buffer, (char*)key);
+    strcat(buffer, "--->");
+    strcat(buffer, (char*)val);
+    strcat(buffer, "<br>");
+
+}
+
 void parse(server_info* server, client_info* client, int connfd){
-
-
     char** tmp = g_strsplit(server->buffer, "\r\n", -1); //getting the first line
     char** first_line = g_strsplit(tmp[0], " ", -1); //parsing the first line into method, url and version
-
 
     g_hash_table_insert(client->client_headers, g_strdup("METHOD"), g_strdup(first_line[0]));
     g_hash_table_insert(client->client_headers, g_strdup("URL"), g_strdup(first_line[1]));
     g_hash_table_insert(client->client_headers, g_strdup("VERSION"), g_strdup(first_line[2]));
     
-    parse_query(server, client, connfd, first_line);
-
-
-
+    parse_URL(server, client, connfd, first_line);
 
     int index = 1;
     while(tmp[index] != NULL){
@@ -341,23 +361,22 @@ void parse(server_info* server, client_info* client, int connfd){
     g_hash_table_foreach(client->client_headers, for_each_func, NULL);
 
     g_strfreev(tmp);
-    g_strfreev(first_line);
-    
-
-
-    
+    g_strfreev(first_line);   
 }
 
-void parse_query(server_info* server, client_info* client, int connfd, char** first_line){
+void parse_URL(server_info* server, client_info* client, int connfd, char** first_line){
     char** tmp_query = g_strsplit(first_line[1], "?", -1);
     //fprintf(stdout, "!!!THIS IS tmp_query: %s\n", tmp_query[0]);fflush(stdout);
     if(g_strcmp0(tmp_query[0], "/color") == 0){
         //add color
-        char** tmp_color = g_strsplit(tmp_query[1], "=", -1);
-        memset(client->color, 0, sizeof(client->color));
-        strcat(client->color, tmp_color[1]);
+        client->isItColor = 1;
+        parse_query(client, tmp_query);
         //fprintf(stdout, "!!!THIS IS COLOR: %s\n", tmp_color[1]);fflush(stdout);
-        g_strfreev(tmp_color);
+        set_color(client);
+        g_hash_table_foreach(client->client_queries, for_each_func, NULL);
+
+        // TODO:
+        // what if /color?hassi=marvinsanalliver&bg=red
     }
     else if(g_strcmp0(tmp_query[0], "/") == 0){
         //normal get response
@@ -366,42 +385,11 @@ void parse_query(server_info* server, client_info* client, int connfd, char** fi
     }
     else if(g_strcmp0(tmp_query[0], "/test") == 0){
         //do something - show query one in each line
-        memset(client->query_buffer, 0, sizeof(client->query_buffer));
-        char** tmp_tester = g_strsplit(tmp_query[1], "&", -1);
-
-        if(tmp_tester[0] == NULL || tmp_tester[1] == NULL){
-            char** tmp_test = g_strsplit(tmp_query[1], "=", -1);
-            int start = 0;
-            while (tmp_test[start] != NULL){
-                strcat(client->query_buffer, tmp_test[start]);
-                start++;
-                if(tmp_test[start] != NULL){
-                    strcat(client->query_buffer, " ----> ");
-                    strcat(client->query_buffer, tmp_test[start]);
-                    //strcat(server->buffer, "<br>");
-                    start++;
-                }
-                strcat(client->query_buffer, "<br>");
-            }
-            g_strfreev(tmp_test);
-            g_strfreev(tmp_tester);
-        }
-        else{
-            int start = 0;
-            char** tmp_test;
-            while(tmp_tester[start] != NULL){
-                tmp_test = g_strsplit(tmp_tester[start], "=", -1);
-                strcat(client->query_buffer, tmp_test[0]);
-                strcat(client->query_buffer, " ----> ");
-                strcat(client->query_buffer,  tmp_test[1]);
-                //strcat(server->buffer, "<br>");
-                start++;
-                strcat(client->query_buffer, "<br>");
-            }
-            g_strfreev(tmp_test);
-            g_strfreev(tmp_tester);
-        }
-
+        client->isItColor = 0;
+        parse_query(client, tmp_query);
+        
+        g_hash_table_foreach(client->client_queries, for_each_func, NULL);
+        
     }
     else if(g_strcmp0(tmp_query[0], "/home") == 0){
         //funZone for get
@@ -416,6 +404,18 @@ void parse_query(server_info* server, client_info* client, int connfd, char** fi
     }
 
     g_strfreev(tmp_query);
+}
+
+void parse_query(client_info* client, char** query){
+    int start = 0;
+    char** tmp_amp = g_strsplit(query[1], "&", -1);
+    while(tmp_amp[start] != NULL){
+        char** tmp_equal = g_strsplit(tmp_amp[start], "=", 2);
+        g_hash_table_insert(client->client_queries, g_strdup(tmp_equal[0]), g_strdup(tmp_equal[1] == NULL ? "NULL" : tmp_equal[1]));
+        start++;
+        g_strfreev(tmp_equal);
+    }
+    g_strfreev(tmp_amp);
 }
 
 void setup_multiple_clients(server_info* server){
@@ -435,6 +435,7 @@ void add_new_client(server_info* server, client_info* clients) {
     clients[next_client].timer = time(NULL);
     server->fds[next_client].events = POLLIN;
     clients[next_client].client_headers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    clients[next_client].client_queries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 }
 
@@ -447,6 +448,8 @@ void check_for_timeouts(client_info* clients, server_info* server){
 
             close(server->fds[i].fd);
             server->fds[i].fd = -1; //TODO sýna jonna timeout pælingar
+            g_hash_table_destroy (clients[i].client_headers);
+            g_hash_table_destroy (clients[i].client_queries);
         }
     }
 }
@@ -478,9 +481,12 @@ void run_server(server_info* server, client_info* clients){
                         if(recv_msg_len == 0){
                             close(server->fds[i].fd);
                             server->fds[i].fd = -1;
+                            g_hash_table_destroy (clients[i].client_headers);
+                            g_hash_table_destroy (clients[i].client_queries);
                         } else{
                             server->buffer[recv_msg_len] = '\0';
                             client_handle(server, &clients[i], server->fds[i].fd);
+
                         }
                     }
                 }
