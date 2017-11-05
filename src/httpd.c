@@ -20,7 +20,7 @@
 #define INVALID 4
 
 
-#define MAX_TIME 30
+#define MAX_TIME 10
 
 typedef int bool;
 #define true 1
@@ -352,21 +352,20 @@ void handle_post(server_info* server, client_info* client){
 
     //fprintf(stdout, "THIS IS fields: %s\n", server->fields);fflush(stdout);
     char** sub_fields = g_strsplit(server->fields, "\r\n\r\n", -1); //accesing the data fields that are accepted in the post request
-    char** split_fields = g_strsplit(sub_fields[1], "=", -1); // splitting the data fields on the '='
-    //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[0]);fflush(stdout);
-
-    //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[1]);fflush(stdout);
+    char** split_fields = g_strsplit(sub_fields[1], "&", -1); // splitting the data fields on the '='
     int start = 0;
+    memset(client->data_buffer, 0, sizeof(client->data_buffer));
     while (split_fields[start] != NULL){
-        //memset(client->data_buffer, 0, sizeof(client->data_buffer));
-        strcat(client->data_buffer, split_fields[start]);
-        start++;
-        if (split_fields[start] != NULL) {
+        char** split_data = g_strsplit(split_fields[start], "=", 2);
+        if (split_data[0] != NULL && split_data[1] != NULL) {
+
+            strcat(client->data_buffer, split_data[0]);
             strcat(client->data_buffer, " ----> ");
-            strcat(client->data_buffer, split_fields[start]);
+            strcat(client->data_buffer, split_data[1]);
+            strcat(client->data_buffer, "<br>");
             start++;
         }
-        strcat(client->data_buffer, "<br>");
+        g_strfreev(split_data);
     }
     strcat(server->buffer,client->data_buffer);
     if(client->isItColor != true){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
