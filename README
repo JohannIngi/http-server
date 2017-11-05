@@ -7,11 +7,22 @@
  * Jóhann Ingi Bjarnason [johannb16@ru.is]
  *
 */
-
+==============================================================================================
+**9. (5 points (bonus)) Fairness**
+One definition of fairness is that all clients that send a request to the server will eventually
+receive a reply. Ensure that this is the case for your server and carefully explain why your
+server ensures this property.
+	- Our server ensures fairness because it iterates through all clients that are currently connected. Every client gets to finish all his actions in every iteration. 
+	If on the other hand or server would e.g. choose a client randomly or always choose the first client that connects, it would not be ensuring fairness.
+==============================================================================================
+PA2:
 Out http server answers requests from one or more clients, up to 10 clients at a time. Answearing their requests with appropriate messages according to the project describtion that we received from our teacher. The server writes a timestamp for each request from clients in a log file that is generated automatically. If a client is inactive on the server for 30 seconds he is timed out and his connection closed. The server responds to requests with various messages, ranging from pure http headers to simple html pages.
-Our server was tested using the browsers Microsoft Edge and Brave.
+Our server was tested using the browsers Microsoft Edge, Google Chrome and Brave.
 
-Descriptions of the functions implemented in this project
+PA3:
+
+
+**Descriptions of the functions implemented in this project**
 ==============================================================================================
 void error_handler(char* error_buffer) -> Write out the error message that are sent to this function
 

@@ -90,6 +90,7 @@ int main(int argc, char **argv){
     server_info server;
     memset(&server, 0, sizeof(server));
     client_info clients[MAX_CLIENTS];
+    memset(clients, 0, sizeof(clients));
     fprintf(stdout, "Listening to server number: %s\n", welcome_port); fflush(stdout);  
     startup_server(&server, welcome_port);
     run_server(&server, clients);
@@ -281,18 +282,18 @@ void create_header(server_info* server, client_info* client, size_t content_len)
     strcat(server->header_buffer, "\r\nContent-Type: text/html\r\nConnection: ");
     if(client->keep_alive == -1){
         if(g_strcmp0(tmp_version, "HTTP/1.1") == 0){
-            strcat(server->header_buffer, "keep-alive");
+            strcat(server->header_buffer, "keep-alive\r\n");
 
         }
         else if(g_strcmp0(tmp_version, "HTTP/1.0") == 0){
-            strcat(server->header_buffer, "close");
+            strcat(server->header_buffer, "close\r\n");
         }
     }
     else if(client->keep_alive == 0){
-        strcat(server->header_buffer, "close");
+        strcat(server->header_buffer, "close\r\n");
     }
     else if(client->keep_alive == 1){
-        strcat(server->header_buffer, "keep-alive");
+        strcat(server->header_buffer, "keep-alive\r\n");
     }
 
     strcat(server->header_buffer, "\r\n\r\n");
@@ -357,7 +358,7 @@ void handle_post(server_info* server, client_info* client){
     //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[1]);fflush(stdout);
     int start = 0;
     while (split_fields[start] != NULL){
-        memset(client->data_buffer, 0, sizeof(client->data_buffer));
+        //memset(client->data_buffer, 0, sizeof(client->data_buffer));
         strcat(client->data_buffer, split_fields[start]);
         start++;
         if (split_fields[start] != NULL) {
