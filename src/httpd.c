@@ -357,6 +357,7 @@ void handle_post(server_info* server, client_info* client){
     //fprintf(stdout, "THIS IS split_fields: %p\n", sub_fields[1]);fflush(stdout);
     int start = 0;
     while (split_fields[start] != NULL){
+        memset(client->data_buffer, 0, sizeof(client->data_buffer));
         strcat(client->data_buffer, split_fields[start]);
         start++;
         if (split_fields[start] != NULL) {
@@ -375,10 +376,10 @@ void handle_post(server_info* server, client_info* client){
     g_strfreev(split_fields);
 }
 
-/*void for_each_func(gpointer key, gpointer val, gpointer data)
+void for_each_func(gpointer key, gpointer val, gpointer data)
 {
     printf("%s -> %s\n", ((char*)key), ((char*)val));
-}*/
+}
 
 void add_queries(gpointer key, gpointer val, gpointer data){
     char* buffer = (char*)data;
@@ -412,7 +413,7 @@ void parse(server_info* server, client_info* client, int connfd){
         }
     }
 
-    //g_hash_table_foreach(client->client_headers, for_each_func, NULL);
+    g_hash_table_foreach(client->client_headers, for_each_func, NULL);
 
     g_strfreev(tmp);
     g_strfreev(first_line);   
