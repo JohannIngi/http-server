@@ -81,7 +81,6 @@ void add_queries(gpointer key, gpointer val, gpointer data);
 void parse_query(client_info* client, char** query);
 void set_color(client_info* client);
 void check_content(server_info* server);
-void parse_cookie(client_info* client);
 
 
 int main(int argc, char **argv){
@@ -214,12 +213,24 @@ void set_method(client_info* client){
 }
 
 void set_color(client_info* client){
-    char* tmp = (char*)g_hash_table_lookup(client->client_queries, "bg");
-    if(tmp != NULL){
+    char* tmp_bg = (char*)g_hash_table_lookup(client->client_queries, "bg");
+    char* tmp_cookie = (char*)g_hash_table_lookup(client->client_headers, "Cookie");
+    if(tmp_bg != NULL){
         memset(client->color, 0, sizeof(client->color));
-        strcat(client->color, tmp);
+        strcat(client->color, tmp_bg);
+        return;
     }
-    
+    else if(tmp_cookie != NULL){
+        char** cookie_split = g_strsplit(tmp_cookie, "=", 2);
+        if(cookie_split[1] != NULL){
+            memset(client->color, 0, sizeof(client->color));
+            strcat(client->color, cookie_split[1]);
+        }
+        g_strfreev(cookie_split);
+        return;
+    }
+
+
 }
 
 void set_keep_alive(client_info* client){
@@ -419,21 +430,6 @@ void parse(server_info* server, client_info* client, int connfd){
     g_strfreev(first_line);   
 }
 
-void parse_cookie(client_info* client){
-
-    char* tmp = (char*)g_hash_table_lookup(client->client_headers, "Cookie");
-    if(tmp != NULL){
-        //fprintf(stdout, "!!!!!!!!!!!!!!!!!!!!THIS IS Cookie: %s\n", tmp);fflush(stdout);
-        char** cookie_split = g_strsplit(tmp, "=", 2);
-        if(cookie_split[1] != NULL){
-            memset(client->color, 0, sizeof(client->color));
-            strcat(client->color, cookie_split[1]);
-        }
-        //else{fprintf(stdout, "!!!!!!!!!!!!!!!!cookie color is not set!!!!!!!!!\n");fflush(stdout);}
-
-        g_strfreev(cookie_split);
-    }
-}
 
 void parse_URL(server_info* server, client_info* client, int connfd, char** first_line){
     char** tmp_query = g_strsplit(first_line[1], "?", -1);
@@ -445,7 +441,6 @@ void parse_URL(server_info* server, client_info* client, int connfd, char** firs
         //fprintf(stdout, "!!!THIS IS COLOR: %s\n", tmp_color[1]);fflush(stdout);
 
         set_color(client);
-        parse_cookie(client);
         //g_hash_table_foreach(client->client_queries, for_each_func, NULL);
 
     }
