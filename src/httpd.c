@@ -20,7 +20,7 @@
 #define INVALID 4
 
 
-#define MAX_TIME 10
+#define MAX_TIME 30
 
 typedef int bool;
 #define true 1
@@ -422,13 +422,14 @@ void parse_cookie(client_info* client){
 
     char* tmp = (char*)g_hash_table_lookup(client->client_headers, "Cookie");
     if(tmp != NULL){
-        fprintf(stdout, "!!!!!!!!!!!!!!!!!!!!THIS IS Cookie: %s\n", tmp);fflush(stdout);
+        //fprintf(stdout, "!!!!!!!!!!!!!!!!!!!!THIS IS Cookie: %s\n", tmp);fflush(stdout);
         char** cookie_split = g_strsplit(tmp, "=", 2);
         if(cookie_split[1] != NULL){
             memset(client->color, 0, sizeof(client->color));
             strcat(client->color, cookie_split[1]);
         }
-        else{fprintf(stdout, "!!!!!!!!!!!!!!!!cookie color is not set!!!!!!!!!\n");fflush(stdout);}
+        //else{fprintf(stdout, "!!!!!!!!!!!!!!!!cookie color is not set!!!!!!!!!\n");fflush(stdout);}
+
         g_strfreev(cookie_split);
     }
 }
@@ -558,7 +559,12 @@ void run_server(server_info* server, client_info* clients){
                         } else{
                             server->buffer[recv_msg_len] = '\0';
                             client_handle(server, &clients[i], server->fds[i].fd);
-
+                            if(clients[i].keep_alive != 1){
+                                close(server->fds[i].fd);
+                                server->fds[i].fd = -1;
+                                g_hash_table_destroy (clients[i].client_headers);
+                                g_hash_table_destroy (clients[i].client_queries);
+                            }
                         }
                     }
                 }
