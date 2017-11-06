@@ -301,7 +301,7 @@ void send_error(server_info* server, int connfd){
     send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
 }
 /************************************************************************************************************************/
-/*  Creates the neccessery elements that are needed to send a header                                                    */
+/*  Creates the necessery elements that are needed to send a header                                                    */
 /*  Loooks for the appropriate version the client asked for and takes in content-length as a parameter                  */
 /*  Sends the client a cookie if he initializes a color on the color page                                               */
 /*  If the keep-alive variable is set to -1 then we know that the client did not specify anything about the connection  */
