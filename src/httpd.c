@@ -214,17 +214,21 @@ void set_method(client_info* client){
 
 void set_color(client_info* client){
     char* tmp_bg = (char*)g_hash_table_lookup(client->client_queries, "bg");
-    char* tmp_cookie = (char*)g_hash_table_lookup(client->client_headers, "Cookie");
     if(tmp_bg != NULL){
-        memset(client->color, 0, sizeof(client->color));
-        strcat(client->color, tmp_bg);
+        strcpy(client->color, tmp_bg);
         return;
     }
-    else if(tmp_cookie != NULL){
-        char** cookie_split = g_strsplit(tmp_cookie, "=", 2);
-        if(cookie_split[1] != NULL){
-            memset(client->color, 0, sizeof(client->color));
-            strcat(client->color, cookie_split[1]);
+    char* tmp_cookie = (char*)g_hash_table_lookup(client->client_headers, "Cookie");
+    if(tmp_cookie != NULL){
+        char** cookie_split = g_strsplit(tmp_cookie, "; ", -1);
+        int start = 0;
+        while(cookie_split[start] != NULL){
+            char** value_split = g_strsplit(cookie_split[start], "=", 2);
+            if(value_split[0] != NULL && value_split[1] != NULL && !g_strcmp0(value_split[0], "color")){
+                strcpy(client->color, value_split[1]);
+            }
+            start++;
+            g_strfreev(value_split);
         }
         g_strfreev(cookie_split);
         return;
@@ -285,7 +289,7 @@ void create_header(server_info* server, client_info* client, size_t content_len)
     sprintf(tmp, "%zu", content_len);
     strcat(server->header_buffer, tmp);
 
-    if(client->color != NULL){
+    if(client->color[0] != 0){
         strcat(server->header_buffer, "\r\nSet-Cookie: color=");
         strcat(server->header_buffer, client->color);
     }
@@ -315,11 +319,12 @@ void create_header(server_info* server, client_info* client, size_t content_len)
 void handle_get(server_info* server, client_info* client){
     memset(server->buffer, 0, sizeof(server->buffer));
     strcat(server->buffer, "<html><head><title>test</title></head><body style=\"background-color: ");
+    fprintf(stdout, "THIS IS THE COLOR BUFFER in the HTML: %s\n", client->color); fflush(stdout);
     strcat(server->buffer, client->color);
     strcat(server->buffer, "\"><center><h2>http://");
     char* tmp_host = (char*)g_hash_table_lookup(client->client_headers, "Host");
     strcat(server->buffer, tmp_host);
-    strcat(server->buffer, " ");
+    strcat(server->buffer, "/ ");
     char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
     strcat(server->buffer, ip);
     strcat(server->buffer, ":");
@@ -346,7 +351,7 @@ void handle_post(server_info* server, client_info* client){
     strcat(server->buffer, "\"><center><h2>http://");
     char* tmp_host = (char*)g_hash_table_lookup(client->client_headers, "Host");
     strcat(server->buffer, tmp_host);
-    strcat(server->buffer, " ");
+    strcat(server->buffer, "/ ");
     char *ip = inet_ntoa(client->address.sin_addr); // getting the clients ip address
     strcat(server->buffer, ip);
     strcat(server->buffer, ":");
@@ -409,7 +414,7 @@ void parse(server_info* server, client_info* client, int connfd){
     g_hash_table_insert(client->client_headers, g_strdup("URL"), g_strdup(first_line[1]));
     g_hash_table_insert(client->client_headers, g_strdup("VERSION"), g_strdup(first_line[2]));
     
-    parse_URL(server, client, connfd, first_line);
+    
 
     int index = 1;
     while(tmp[index] != NULL){
@@ -423,7 +428,7 @@ void parse(server_info* server, client_info* client, int connfd){
             g_strfreev(header);
         }
     }
-
+    parse_URL(server, client, connfd, first_line);
     g_hash_table_foreach(client->client_headers, for_each_func, NULL);
 
     g_strfreev(tmp);
@@ -542,7 +547,7 @@ void run_server(server_info* server, client_info* clients){
                         add_new_client(server, clients);
                     } else{
                         fprintf(stdout,  "Some CLIENT with a request!\n"); fflush(stdout);
-
+                        memset(clients[i].color, 0, sizeof(clients[i].color));
                         ssize_t recv_msg_len = recv(server->fds[i].fd, server->buffer, sizeof(server->buffer) -1, 0);
                         if(recv_msg_len < 0){ error_handler("Receive failed");}
                         clients[i].timer = time(NULL);
