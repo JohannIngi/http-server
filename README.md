@@ -8,19 +8,23 @@
  *
 */
 
-==============================================================================================
+***
+
 Answer to question 9. (5 points (bonus)) Fairness in PA2
 One definition of fairness is that all clients that send a request to the server will eventually
 receive a reply. Ensure that this is the case for your server and carefully explain why your
 server ensures this property.
 - Our server ensures fairness because it iterates through all clients that are currently connected. Every client gets to finish all his actions in every iteration. 
 If on the other hand the server would e.g. choose a client randomly or always choose the first client that connects, it would not be ensuring fairness.
-==============================================================================================
+
+***
+
 Answer to question 9.3 (5 points (bonus)) in PA3
 Why is HTTP basic authentication not secure? Explain why it is necessary
 to allow secure authentication only over SSL.
 - When sending e.g. username and password over the wire using HTTP basic authentication it will be sent as a plain-text for the whole world to see. It is necessary to use secure authentication because then the entire message you send is encrypted based on keys and SSL certificate. HTTPS also provides ways for authentication and not only encryption.
-==============================================================================================
+
+***
 
 
 **PA2:
