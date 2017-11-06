@@ -95,9 +95,10 @@ void init_SSL();
 
 
 int main(int argc, char **argv){
-    if (argc != 3) error_handler("invalid arguments");
+    if (argc != 3) error_handler("Invalid arguments");
     char* welcome_port = argv[1];
     char* welcome_port_2 = argv[2];
+    if(g_strcmp0(welcome_port, welcome_port_2) == 0) error_handler("Port numbers can't be the same!");
     server_info server;
     memset(&server, 0, sizeof(server));
     client_info clients[MAX_CLIENTS];
@@ -122,7 +123,7 @@ int find_next_available_client(pollfd* fds){
     int i;
     for(i = 1; i < MAX_CLIENTS; i++){
         if(fds[i].fd == -1){
-            fprintf(stdout, "index found: %d\n", i);
+            fprintf(stdout, "Index found: %d\n", i);
             return i; //returns the next available object
         }
     }
@@ -361,7 +362,6 @@ void create_header(server_info* server, client_info* client, size_t content_len)
 void handle_get(server_info* server, client_info* client){
     memset(server->buffer, 0, sizeof(server->buffer));
     strcat(server->buffer, "<html><head><title>test</title></head><body style=\"background-color: ");
-    fprintf(stdout, "THIS IS THE COLOR BUFFER in the HTML: %s\n", client->color); fflush(stdout);
     strcat(server->buffer, client->color);
     strcat(server->buffer, "\"><center><h2>http://");
     char* tmp_host = (char*)g_hash_table_lookup(client->client_headers, "Host");
@@ -589,15 +589,15 @@ void run_server(server_info* server, client_info* clients){
             error_handler("Poll failed");
         }
         if (p == 0) {
-            fprintf(stdout, "No events for  seconds\n"); fflush(stdout);
+            fprintf(stdout, "No events for 15 seconds\n"); fflush(stdout);
         } else {
             for(int i = 0; i < MAX_CLIENTS; i++){
                 if (server->fds[i].fd != -1 && (server->fds[i].revents & POLLIN)) {
                     if(i == 0){
-                        fprintf(stdout, "New CLIENT!\n"); fflush(stdout);
+                        fprintf(stdout, "New client!\n"); fflush(stdout);
                         add_new_client(server, clients);
                     } else{
-                        fprintf(stdout,  "A CLIENT has sent a request!\n"); fflush(stdout);
+                        fprintf(stdout,  "A client has sent a request!\n"); fflush(stdout);
                         memset(clients[i].color, 0, sizeof(clients[i].color));
                         ssize_t recv_msg_len = recv(server->fds[i].fd, server->buffer, sizeof(server->buffer) -1, 0);
                         if(recv_msg_len < 0){ error_handler("Receive failed");}
@@ -637,8 +637,8 @@ void startup_server(server_info* server, const char* port){
     server->address.sin_family = AF_INET;
     server->address.sin_addr.s_addr = htonl(INADDR_ANY);
     server->address.sin_port = htons(atoi(port));
-    if(bind(server->fds[0].fd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("bind failed");}
-    if(listen(server->fds[0].fd, QUEUED) < 0){error_handler("listen failed");}
+    if(bind(server->fds[0].fd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("Bind failed");}
+    if(listen(server->fds[0].fd, QUEUED) < 0){error_handler("Listen failed");}
 }
 /******************************************************************************/
 /*  Sets up SSL and check if key matches. All error results in termination    */
