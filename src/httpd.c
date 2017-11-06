@@ -10,6 +10,11 @@
 #include <glib.h>
 #include <time.h>
 #include <arpa/inet.h>
+#include <openssl/crypto.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/engine.h>
+#include <openssl/conf.h>
 
 #define QUEUED 5
 #define MAX_CLIENTS 10
@@ -19,13 +24,17 @@
 #define HEAD 3
 #define INVALID 4
 
-
 #define MAX_TIME 10
+
+/* Paths to file. These are relative to the root of the project.
+ * By adding '../' in front, one can run from '/src'. */
+#define CERTIFICATE "fd.crt"
+#define PRIVATE_KEY "fd.key"
+#define PASSWORD_FILE "passwd.ini"
 
 typedef int bool;
 #define true 1
 #define false 0
-
 
 typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
@@ -56,7 +65,7 @@ typedef struct
     
 }server_info;
 
-
+static SSL_CTX *ctx;
 
 void error_handler(char* error_buffer);
 int find_next_available_client(pollfd* fds);
@@ -81,6 +90,7 @@ void add_queries(gpointer key, gpointer val, gpointer data);
 void parse_query(client_info* client, char** query);
 void set_color(client_info* client);
 void check_content(server_info* server);
+void init_SSL();
 
 
 int main(int argc, char **argv){
@@ -92,7 +102,8 @@ int main(int argc, char **argv){
     client_info clients[MAX_CLIENTS];
     memset(clients, 0, sizeof(clients));
     fprintf(stdout, "Listening to port number: %s\n", welcome_port); fflush(stdout);
-    fprintf(stdout, "Listening to port number: %s\n", welcome_port_2); fflush(stdout);  
+    fprintf(stdout, "Listening to port number: %s\n", welcome_port_2); fflush(stdout);
+    void init_ssl();
     startup_server(&server, welcome_port);
     run_server(&server, clients);
 }
@@ -147,15 +158,10 @@ void write_to_log(client_info* client){
 }
 void client_handle(server_info* server, client_info* client, int connfd){
 
-    //fprintf(stdout, "%s\n", server->buffer); fflush(stdout);
     client->isItColor = false;
     parse(server, client, connfd);
 
     set_method(client);
-
-   // fprintf(stdout, "--------------------------------------\n");fflush(stdout);
-   // fprintf(stdout, "-----THIS IS THE METHOD 8====> %s\n", client->method);fflush(stdout);
-    //fprintf(stdout, "----------------( . )( . )------------\n");fflush(stdout);
 
     set_keep_alive(client);
     
@@ -176,7 +182,6 @@ void client_handle(server_info* server, client_info* client, int connfd){
     else if(g_strcmp0(client->method, "HEAD") == 0){
         handle_get(server, client);
         int content_length = strlen(server->buffer);
-        //fprintf(stdout, "CONTENT LENGTH %d\n", content_length);fflush(stdout);
         create_header(server, client, content_length);
         write_to_log(client);
         send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
@@ -368,7 +373,6 @@ void handle_post(server_info* server, client_info* client){
     strcat(server->buffer, "<br>To go to the test page type: '/test' in the url (example query: ?TSAM=AWESOME");
     strcat(server->buffer, "<br>Enter something awesome into this field box and it will be displayed below</h3><br><input type=\"text\" name=\"value\"><br><input type=\"submit\" value=\"Submit\"></form><br>");
 
-    //fprintf(stdout, "THIS IS fields: %s\n", server->fields);fflush(stdout);
     char** sub_fields = g_strsplit(server->fields, "\r\n\r\n", -1); //accesing the data fields that are accepted in the post request
     char** split_fields = g_strsplit(sub_fields[1], "&", -1); // splitting the data fields on the '='
     int start = 0;
@@ -416,8 +420,6 @@ void parse(server_info* server, client_info* client, int connfd){
     g_hash_table_insert(client->client_headers, g_strdup("URL"), g_strdup(first_line[1]));
     g_hash_table_insert(client->client_headers, g_strdup("VERSION"), g_strdup(first_line[2]));
     
-    
-
     int index = 1;
     while(tmp[index] != NULL){
         if(g_strcmp0(tmp[index], "") == 0){
@@ -436,7 +438,6 @@ void parse(server_info* server, client_info* client, int connfd){
     g_strfreev(tmp);
     g_strfreev(first_line);   
 }
-
 
 void parse_URL(server_info* server, client_info* client, int connfd, char** first_line){
     char** tmp_query = g_strsplit(first_line[1], "?", -1);
@@ -578,6 +579,7 @@ void run_server(server_info* server, client_info* clients){
 }
 
 void startup_server(server_info* server, const char* port){
+    init_SSL();
     server->fds[0].fd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&server->address, 0, sizeof(sockaddr_in));
     server->address.sin_family = AF_INET;
@@ -585,4 +587,21 @@ void startup_server(server_info* server, const char* port){
     server->address.sin_port = htons(atoi(port));
     if(bind(server->fds[0].fd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("bind failed");}
     if(listen(server->fds[0].fd, QUEUED) < 0){error_handler("listen failed");}
+}
+/* Sets up SSL and check if key matches. All error results in termination. */
+void init_SSL()
+{
+    // Internal SSL init functions
+    SSL_library_init();
+    SSL_load_error_strings();
+
+    // Authentication
+    if ((ctx = SSL_CTX_new(TLSv1_method())) == NULL) error_handler("SSL CTX");
+    if (SSL_CTX_use_certificate_file(ctx, CERTIFICATE, SSL_FILETYPE_PEM) <= 0) error_handler("certificate");
+    if (SSL_CTX_use_PrivateKey_file(ctx, PRIVATE_KEY, SSL_FILETYPE_PEM) <= 0) error_handler("privatekey");
+    if (SSL_CTX_check_private_key(ctx) != 1) error_handler("match");
+
+    // Message to user
+    fprintf(stdout, "Access granted\n");
+    fflush(stdout);
 }
