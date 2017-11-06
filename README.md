@@ -7,6 +7,7 @@
  * Jóhann Ingi Bjarnason [johannb16@ru.is]
  *
 */
+
 ==============================================================================================
 Answer to question 9. (5 points (bonus)) Fairness in PA2
 One definition of fairness is that all clients that send a request to the server will eventually
@@ -14,7 +15,6 @@ receive a reply. Ensure that this is the case for your server and carefully expl
 server ensures this property.
 - Our server ensures fairness because it iterates through all clients that are currently connected. Every client gets to finish all his actions in every iteration. 
 If on the other hand the server would e.g. choose a client randomly or always choose the first client that connects, it would not be ensuring fairness.
-==============================================================================================
 ==============================================================================================
 Answer to question 9.3 (5 points (bonus)) in PA3
 Why is HTTP basic authentication not secure? Explain why it is necessary
