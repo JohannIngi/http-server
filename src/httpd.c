@@ -24,10 +24,9 @@
 #define HEAD 3
 #define INVALID 4
 
-#define MAX_TIME 10
+#define MAX_TIME 30
 
-/* Paths to file. These are relative to the root of the project.
- * By adding '../' in front, one can run from '/src'. */
+// Paths to file.
 #define CERTIFICATE "fd.crt"
 #define PRIVATE_KEY "fd.key"
 #define PASSWORD_FILE "passwd.ini"
@@ -40,6 +39,7 @@ typedef struct sockaddr_in sockaddr_in;
 typedef struct sockaddr sockaddr;
 typedef struct pollfd pollfd;
 
+//all the variables that each client needs kept in a struct
 typedef struct 
 {
     sockaddr_in address;
@@ -54,7 +54,7 @@ typedef struct
     GHashTable* client_headers;
     GHashTable* client_queries;
 } client_info;
-
+//all server variables kept in a struct
 typedef struct
 {
     sockaddr_in address;
@@ -65,6 +65,7 @@ typedef struct
     
 }server_info;
 
+//global variable for the SSL authentication
 static SSL_CTX *ctx;
 
 void error_handler(char* error_buffer);
@@ -107,12 +108,16 @@ int main(int argc, char **argv){
     startup_server(&server, welcome_port);
     run_server(&server, clients);
 }
-
+/*************************************************/
+/*  Handles all error that occur and shuts down  */
+/*************************************************/
 void error_handler(char* error_buffer){
     perror(error_buffer);
     exit(EXIT_FAILURE);
 }
-
+/*************************************************/
+/*  Finding the next available client            */
+/*************************************************/
 int find_next_available_client(pollfd* fds){
     int i;
     for(i = 1; i < MAX_CLIENTS; i++){
@@ -135,7 +140,9 @@ void get_time(client_info* client){
     t_info = localtime(&t);
     strftime(client->time_buffer, sizeof(client->time_buffer), "%a, %d %b %Y %X GMT", t_info);  
 }
-
+/*************************************************/
+/*  Writing to a log file in the root directory  */
+/*************************************************/
 void write_to_log(client_info* client){
 
     get_time(client);
@@ -156,6 +163,9 @@ void write_to_log(client_info* client){
     }
     fclose(file);
 }
+/**************************************************************************************************/
+/*  Client handler that decides what to do based on the client request; get, post, head or error  */
+/**************************************************************************************************/
 void client_handle(server_info* server, client_info* client, int connfd){
 
     client->isItColor = false;
@@ -194,7 +204,9 @@ void client_handle(server_info* server, client_info* client, int connfd){
     }
 }
 
-//checking if there is some html content inside the server buffer to be displayed
+/**************************************************************************************/
+/*  Checking if there is some html content inside the server buffer to be displayed  */
+/*************************************************************************************/
 void check_content(server_info* server){
         if (server->buffer != NULL) {
             strcat(server->header_buffer, "\r\n\r\n");
@@ -203,7 +215,10 @@ void check_content(server_info* server){
             strcat(server->header_buffer, "\r\n\r\n");
         }
 }
-
+/****************************************************************************************************/
+/*  Looks for the "method" key in the headers-hastable and sets the current method if it finds one  */
+/*  Else method is null and will send a 501 error in client handle                                  */
+/****************************************************************************************************/
 void set_method(client_info* client){
     memset(client->method, 0, sizeof(client->method));
     char* tmp = (char*)g_hash_table_lookup(client->client_headers, "METHOD");
@@ -218,7 +233,9 @@ void set_method(client_info* client){
     }
 
 }
-
+/***************************************************************************************************************/
+/*  Checks if there has been a color determined with a query or a cookie, by looking in both client hashtables */
+/***************************************************************************************************************/
 void set_color(client_info* client){
     char* tmp_bg = (char*)g_hash_table_lookup(client->client_queries, "bg");
     if(tmp_bg != NULL){
@@ -227,6 +244,7 @@ void set_color(client_info* client){
     }
     char* tmp_cookie = (char*)g_hash_table_lookup(client->client_headers, "Cookie");
     if(tmp_cookie != NULL){
+        //parsing the cookies that are found
         char** cookie_split = g_strsplit(tmp_cookie, "; ", -1);
         int start = 0;
         while(cookie_split[start] != NULL){
@@ -243,7 +261,10 @@ void set_color(client_info* client){
 
 
 }
-
+/*********************************************************************************************************************************/
+/* Int keep-alive is initialized at -1, if client asks for keep-alive the variable is 1 if he asks for close connection it is 0 */
+/*  server deals further with it in the create header function                                                                    */
+/*********************************************************************************************************************************/
 void set_keep_alive(client_info* client){
     client->keep_alive = -1;
     char* tmp = (char*)g_hash_table_lookup(client->client_headers, "Connection");
@@ -254,7 +275,9 @@ void set_keep_alive(client_info* client){
         client->keep_alive = 0; // no need for keep alive
     }
 }
-
+/*****************************************************************************************************/
+/*  Creates the html needed to send an error, takes in error version and error message as parameters */
+/*****************************************************************************************************/
 void generate_error(server_info* server, client_info* client, char* error_version, char* error_msg, size_t content_len){
     memset(server->header_buffer, 0, sizeof(server->header_buffer));
     strcat(server->header_buffer, error_version);
@@ -271,11 +294,19 @@ void generate_error(server_info* server, client_info* client, char* error_versio
     strcat(server->header_buffer, error_msg);
     strcat(server->header_buffer, "</h1></center></body></html>");
 }
-
+/**********************************/
+/*  Sends the error to the client */
+/**********************************/
 void send_error(server_info* server, int connfd){
     send(connfd, server->header_buffer, strlen(server->header_buffer), 0);
 }
-
+/************************************************************************************************************************/
+/*  Creates the neccessery elements that are needed to send a header                                                    */
+/*  Loooks for the appropriate version the client asked for and takes in content-length as a parameter                  */
+/*  Sends the client a cookie if he initializes a color on the color page                                               */
+/*  If the keep-alive variable is set to -1 then we know that the client did not specify anything about the connection  */
+/*  If that happens the version determines keep-alive, HTTP/1.1 = alive, HTTP/1.0 = close                               */
+/************************************************************************************************************************/
 void create_header(server_info* server, client_info* client, size_t content_len){
     memset(server->header_buffer, 0, sizeof(server->header_buffer));
     char* tmp_version = (char*)g_hash_table_lookup(client->client_headers, "VERSION");
@@ -322,7 +353,11 @@ void create_header(server_info* server, client_info* client, size_t content_len)
 
 
 }
-
+/***********************************************************************/
+/*  Creating a html body for GET requests                              */
+/*  Sets the color for the client                                      */
+/*  Puts the clients port and IP address into the html to be displayed */
+/***********************************************************************/
 void handle_get(server_info* server, client_info* client){
     memset(server->buffer, 0, sizeof(server->buffer));
     strcat(server->buffer, "<html><head><title>test</title></head><body style=\"background-color: ");
@@ -345,10 +380,16 @@ void handle_get(server_info* server, client_info* client){
     strcat(server->buffer, "<br>To go to the color page type: '/color' in the url (example color query: ?bg=red");
     strcat(server->buffer, "<br>To go to the test page type: '/test' in the url (example query: ?TSAM=AWESOME");
     strcat(server->buffer, "<br>Enter something awesome into this field box and it will be displayed below</h3><br><input type=\"text\" name=\"value\"><br><input type=\"submit\" value=\"Submit\"></form><br>");
+    //If the variable isItColor is true then we are on the color page, if not then the server can regard all queries as tests and display them
     if(client->isItColor != true){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
     strcat(server->buffer, "</center></body></html>");
 }
-
+/************************************************************************/
+/*  Creating a html body for POST requests                              */
+/*  Sets the color for the client                                       */
+/*  Puts the clients port and IP address into the html to be displayed  */
+/*  Accesses the host information from the client for display           */
+/************************************************************************/
 void handle_post(server_info* server, client_info* client){
     memset(server->fields, 0, sizeof(server->fields));
     strcpy(server->fields, server->buffer);
@@ -372,7 +413,7 @@ void handle_post(server_info* server, client_info* client){
     strcat(server->buffer, "<br>To go to the color page type: '/color' in the url (example color query: ?bg=red");
     strcat(server->buffer, "<br>To go to the test page type: '/test' in the url (example query: ?TSAM=AWESOME");
     strcat(server->buffer, "<br>Enter something awesome into this field box and it will be displayed below</h3><br><input type=\"text\" name=\"value\"><br><input type=\"submit\" value=\"Submit\"></form><br>");
-
+    //parsing the data that the client sends
     char** sub_fields = g_strsplit(server->fields, "\r\n\r\n", -1); //accesing the data fields that are accepted in the post request
     char** split_fields = g_strsplit(sub_fields[1], "&", -1); // splitting the data fields on the '='
     int start = 0;
@@ -380,7 +421,7 @@ void handle_post(server_info* server, client_info* client){
     while (split_fields[start] != NULL){
         char** split_data = g_strsplit(split_fields[start], "=", 2);
         if (split_data[0] != NULL && split_data[1] != NULL) {
-
+            //adding the parsed data to a buffer
             strcat(client->data_buffer, split_data[0]);
             strcat(client->data_buffer, " ----> ");
             strcat(client->data_buffer, split_data[1]);
@@ -389,7 +430,9 @@ void handle_post(server_info* server, client_info* client){
         }
         g_strfreev(split_data);
     }
+    //adding the data to the html display buffer
     strcat(server->buffer,client->data_buffer);
+    //If the variable isItColor is true then we are on the color page, if not then the server can regard all queries as tests and display them
     if(client->isItColor != true){g_hash_table_foreach(client->client_queries, add_queries, server->buffer);}
 
     strcat(server->buffer, "</center></body></html>");
@@ -397,12 +440,9 @@ void handle_post(server_info* server, client_info* client){
     g_strfreev(sub_fields);
     g_strfreev(split_fields);
 }
-
-void for_each_func(gpointer key, gpointer val, gpointer data)
-{
-    printf("%s -> %s\n", ((char*)key), ((char*)val));
-}
-
+/************************************************************************************************************/
+/*  A function that is used with g_hash_table_foreach to print out all the variables in the query hashtable */
+/************************************************************************************************************/
 void add_queries(gpointer key, gpointer val, gpointer data){
     char* buffer = (char*)data;
     strcat(buffer, (char*)key);
@@ -411,7 +451,10 @@ void add_queries(gpointer key, gpointer val, gpointer data){
     strcat(buffer, "<br>");
 
 }
-
+/****************************************************************************************/
+/*  Parsing function that parses everything from the header into appropriate hashtable  */
+/*  Takes the first line separately and parses from it method, url and version          */
+/****************************************************************************************/
 void parse(server_info* server, client_info* client, int connfd){
     char** tmp = g_strsplit(server->buffer, "\r\n", -1); //getting the first line
     char** first_line = g_strsplit(tmp[0], " ", -1); //parsing the first line into method, url and version
@@ -433,24 +476,21 @@ void parse(server_info* server, client_info* client, int connfd){
         }
     }
     parse_URL(server, client, connfd, first_line);
-    g_hash_table_foreach(client->client_headers, for_each_func, NULL);
 
     g_strfreev(tmp);
     g_strfreev(first_line);   
 }
-
+/****************************************************************************************/
+/*  Parsing function that parses everything from the URL into appropriate hashtable     */
+/*  Decides what actions to take on what url                                            */
+/****************************************************************************************/
 void parse_URL(server_info* server, client_info* client, int connfd, char** first_line){
     char** tmp_query = g_strsplit(first_line[1], "?", -1);
-    //fprintf(stdout, "!!!THIS IS tmp_query: %s\n", tmp_query[0]);fflush(stdout);
     if(g_strcmp0(tmp_query[0], "/color") == 0){
         //add color
         client->isItColor = true;
         parse_query(client, tmp_query);
-        //fprintf(stdout, "!!!THIS IS COLOR: %s\n", tmp_color[1]);fflush(stdout);
-
         set_color(client);
-        //g_hash_table_foreach(client->client_queries, for_each_func, NULL);
-
     }
     else if(g_strcmp0(tmp_query[0], "/") == 0){
         //normal get response
@@ -460,17 +500,14 @@ void parse_URL(server_info* server, client_info* client, int connfd, char** firs
     else if(g_strcmp0(tmp_query[0], "/test") == 0){
         //do something - show query one in each line
         client->isItColor = false;
-        parse_query(client, tmp_query);
-        
-        //g_hash_table_foreach(client->client_queries, for_each_func, NULL);
-        
+        parse_query(client, tmp_query);    
     }
     else if(g_strcmp0(tmp_query[0], "/home") == 0){
         //funZone for get
         memset(client->color, 0, sizeof(client->color));
         strcat(client->color, "purple");
     }
-    else{ //it is an invalid url
+    else{ //it is an invalid url send error message
         char error_version[] = {"HTTP/1.1 404"};
         char error_msg[] = {"INVALID URL!"};
         generate_error(server, client, error_version, error_msg, sizeof(error_msg));
@@ -479,7 +516,10 @@ void parse_URL(server_info* server, client_info* client, int connfd, char** firs
 
     g_strfreev(tmp_query);
 }
-
+/***************************************************************************************/
+/*  Parsing function that parses everything into appropriate hashtable                 */
+/*  splits all the queries up and stores them appropriatly                             */
+/***************************************************************************************/
 void parse_query(client_info* client, char** query){
     if(query[1] == NULL){
         return;
@@ -494,14 +534,18 @@ void parse_query(client_info* client, char** query){
     }
     g_strfreev(tmp_amp);
 }
-
+/***********************************************/
+/*  Setting up multiple clients connections    */
+/***********************************************/
 void setup_multiple_clients(server_info* server){
     for(int i = 1; i < MAX_CLIENTS; i++){
         server->fds[i].fd = -1;
     }
     server->fds[0].events = POLLIN;
 }
-
+/***********************************************/
+/*  Adding new clients to the server           */
+/***********************************************/
 void add_new_client(server_info* server, client_info* clients) {
 
     socklen_t len = (socklen_t) sizeof(sockaddr_in);
@@ -515,22 +559,26 @@ void add_new_client(server_info* server, client_info* clients) {
     clients[next_client].client_queries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 
 }
-
+/*************************************************/
+/*  If clients time out then close connection    */
+/*************************************************/
 void check_for_timeouts(client_info* clients, server_info* server){
     time_t now = time(NULL);
     for(int i = 1; i < MAX_CLIENTS; i++){
         if (server->fds[i].fd < 0) continue;
         if(difftime(now, clients[i].timer) >= MAX_TIME){
             fprintf(stdout, "Client has timedout\n"); fflush(stdout);
-
+            //closing the port and destroying all information about the client
             close(server->fds[i].fd);
-            server->fds[i].fd = -1; //TODO sýna jonna timeout pælingar
+            server->fds[i].fd = -1; 
             g_hash_table_destroy (clients[i].client_headers);
             g_hash_table_destroy (clients[i].client_queries);
         }
     }
 }
-
+/***************************************************************/
+/*  Running the server loop and calling necessary functions    */
+/***************************************************************/
 void run_server(server_info* server, client_info* clients){
 
     setup_multiple_clients(server);
@@ -541,7 +589,7 @@ void run_server(server_info* server, client_info* clients){
             error_handler("Poll failed");
         }
         if (p == 0) {
-            fprintf(stdout, "No events for 10 seconds\n"); fflush(stdout);
+            fprintf(stdout, "No events for  seconds\n"); fflush(stdout);
         } else {
             for(int i = 0; i < MAX_CLIENTS; i++){
                 if (server->fds[i].fd != -1 && (server->fds[i].revents & POLLIN)) {
@@ -549,13 +597,14 @@ void run_server(server_info* server, client_info* clients){
                         fprintf(stdout, "New CLIENT!\n"); fflush(stdout);
                         add_new_client(server, clients);
                     } else{
-                        fprintf(stdout,  "Some CLIENT with a request!\n"); fflush(stdout);
+                        fprintf(stdout,  "A CLIENT has sent a request!\n"); fflush(stdout);
                         memset(clients[i].color, 0, sizeof(clients[i].color));
                         ssize_t recv_msg_len = recv(server->fds[i].fd, server->buffer, sizeof(server->buffer) -1, 0);
                         if(recv_msg_len < 0){ error_handler("Receive failed");}
                         clients[i].timer = time(NULL);
 
                         if(recv_msg_len == 0){
+                            //closing the port and destroying all information about the client
                             close(server->fds[i].fd);
                             server->fds[i].fd = -1;
                             g_hash_table_destroy (clients[i].client_headers);
@@ -564,6 +613,7 @@ void run_server(server_info* server, client_info* clients){
                             server->buffer[recv_msg_len] = '\0';
                             client_handle(server, &clients[i], server->fds[i].fd);
                             if(clients[i].keep_alive != 1){
+                                //closing the port and destroying all information about the client
                                 close(server->fds[i].fd);
                                 server->fds[i].fd = -1;
                                 g_hash_table_destroy (clients[i].client_headers);
@@ -577,7 +627,9 @@ void run_server(server_info* server, client_info* clients){
         check_for_timeouts(clients, server);
     }    
 }
-
+/************************************************************************/
+/*  Starting up the server, binding and listening to appropriate port   */
+/************************************************************************/
 void startup_server(server_info* server, const char* port){
     init_SSL();
     server->fds[0].fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -588,7 +640,9 @@ void startup_server(server_info* server, const char* port){
     if(bind(server->fds[0].fd, (sockaddr *) &server->address, (socklen_t) sizeof(sockaddr_in)) < 0){error_handler("bind failed");}
     if(listen(server->fds[0].fd, QUEUED) < 0){error_handler("listen failed");}
 }
-/* Sets up SSL and check if key matches. All error results in termination. */
+/******************************************************************************/
+/*  Sets up SSL and check if key matches. All error results in termination    */
+/******************************************************************************/
 void init_SSL()
 {
     // Internal SSL init functions
