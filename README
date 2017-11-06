@@ -8,7 +8,7 @@
  *
 */
 ==============================================================================================
-**9. (5 points (bonus)) Fairness**
+9. (5 points (bonus)) Fairness
 One definition of fairness is that all clients that send a request to the server will eventually
 receive a reply. Ensure that this is the case for your server and carefully explain why your
 server ensures this property.

@@ -84,13 +84,15 @@ void check_content(server_info* server);
 
 
 int main(int argc, char **argv){
-    if (argc != 2) error_handler("invalid arguments");
+    if (argc != 3) error_handler("invalid arguments");
     char* welcome_port = argv[1];
+    char* welcome_port_2 = argv[2];
     server_info server;
     memset(&server, 0, sizeof(server));
     client_info clients[MAX_CLIENTS];
     memset(clients, 0, sizeof(clients));
-    fprintf(stdout, "Listening to server number: %s\n", welcome_port); fflush(stdout);  
+    fprintf(stdout, "Listening to port number: %s\n", welcome_port); fflush(stdout);
+    fprintf(stdout, "Listening to port number: %s\n", welcome_port_2); fflush(stdout);  
     startup_server(&server, welcome_port);
     run_server(&server, clients);
 }
